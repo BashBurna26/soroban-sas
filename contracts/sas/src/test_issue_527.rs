@@ -19,14 +19,8 @@ fn fixture() -> (Env, SASClient<'static>, Address, Address, SigningKey, Address)
     let account =
         stellar_strkey::ed25519::PublicKey(signing_key.verifying_key().to_bytes()).to_string();
     let attester = Address::from_string(&SorobanString::from_str(&env, &account));
-    (
-        env,
-        client,
-        id,
-        attester,
-        signing_key,
-        Address::generate(&env),
-    )
+    let recipient = Address::generate(&env);
+    (env, client, id, attester, signing_key, recipient)
 }
 
 fn attestation(env: &Env, attester: &Address, recipient: &Address, schema: u8) -> Attestation {

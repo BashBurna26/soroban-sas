@@ -69,6 +69,23 @@ fn paid_issuance_quotes_per_byte_and_rejects_underpayment() {
 }
 
 #[test]
+fn byte_fee_cannot_be_bypassed_by_unpaid_attestation() {
+    let (env, sas, _id, admin, issuer, recipient) = fixture();
+    let token = env.register_stellar_asset_contract_v2(admin).address();
+    sas.set_fee(&token, &100);
+    sas.set_fee_per_byte(&1);
+    let a = attestation(&env, &issuer, &recipient, 2);
+    assert_eq!(
+        sas.try_attest(&a),
+        Err(Ok(SASError::InsufficientFee.into()))
+    );
+    assert!(!sas.verify_attestation(&a.uid));
+    sas.set_schema_zero_fee(&a.schema_uid, &true);
+    sas.attest(&a);
+    assert!(sas.verify_attestation(&a.uid));
+}
+
+#[test]
 fn emergency_pause_blocks_mutations_but_keeps_reads() {
     let (env, sas, _id, _admin, issuer, recipient) = fixture();
     let a = attestation(&env, &issuer, &recipient, 2);
