@@ -46,6 +46,12 @@ pub const PENDING_SCHEMA_OWNER: Symbol = symbol_short!("PEND_OWN");
 /// Stored under `(SCHEMA_POLICY, schema_uid) -> RevocationPolicy`.
 pub const SCHEMA_POLICY: Symbol = symbol_short!("POLICY");
 
+/// Storage key for a schema's required FROST threshold signing group (#534).
+/// Stored under `(FROST_GROUP, schema_uid) -> FrostGroup`. Kept beside the
+/// schema record rather than inside it so `SchemaRecord`'s XDR layout remains
+/// byte-stable for existing deployments.
+pub const FROST_GROUP: Symbol = symbol_short!("FROSTGRP");
+
 /// Storage key for the in-flight multi-signature ownership transfer.
 /// Stored under `(PENDING_OWNERSHIP, schema_uid) -> PendingOwnershipTransfer`
 /// and removed as soon as the transfer is executed, cancelled, or invalidated

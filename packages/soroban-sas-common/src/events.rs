@@ -49,6 +49,8 @@ pub const BATCH_REVOKED: Symbol = symbol_short!("BATCHREV");
 pub const INDEXER_STRICT_UPDATED: Symbol = symbol_short!("IDXSTRUP");
 /// First topic of every `SchemaDeprecated` event.
 pub const SCHEMA_DEPRECATED: Symbol = symbol_short!("SCHDEP");
+/// First topic of every `SchemaFrostGroupUpdated` event (#534).
+pub const SCHEMA_FROST_GROUP_UPDATED: Symbol = symbol_short!("FROSTGRP");
 /// First topic of every `ContractPaused` event.
 pub const CONTRACT_PAUSED: Symbol = symbol_short!("PAUSED");
 /// First topic of every `ContractUnpaused` event.
@@ -436,4 +438,24 @@ pub struct IndexingProgressEvent {
     pub recipient_total: u32,
     pub schema_total: u32,
     pub attester_total: u32,
+}
+
+/// Payload of the `SchemaFrostGroupUpdated` event (#534).
+///
+/// Published with topics `(SCHEMA_FROST_GROUP_UPDATED, schema_uid)` whenever a
+/// schema owner sets, rotates, or clears the FROST group that governs
+/// delegated signatures for that schema. The fields are flattened instead of
+/// carrying an `Option<FrostGroup>` because optional nested contract types are
+/// not encodable here (the same constraint documented on [`PreviousAddress`]).
+/// `enabled == false` means the requirement was cleared; the key is then the
+/// all-zero sentinel and both counters are `0`.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SchemaFrostGroupUpdatedEvent {
+    pub schema_uid: UID,
+    pub authorizer: Address,
+    pub enabled: bool,
+    pub group_public_key: BytesN<32>,
+    pub threshold: u32,
+    pub max_signers: u32,
 }
