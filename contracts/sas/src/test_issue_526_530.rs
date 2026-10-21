@@ -3,8 +3,8 @@ use soroban_sas_common::{
     attestation_uid, Attestation, AttestationIssuedWithFeeEvent, SASError, UID,
 };
 use soroban_sdk::{
-    symbol_short, testutils::Address as _, testutils::Events as _,
-    Address, Bytes, BytesN, Env, IntoVal, Vec,
+    symbol_short, testutils::Address as _, testutils::Events as _, Address, Bytes, BytesN, Env,
+    IntoVal, Vec,
 };
 
 fn fixture() -> (Env, SASClient<'static>, Address, Address, Address, Address) {
@@ -74,7 +74,11 @@ fn paid_issuance_quotes_per_byte_and_rejects_underpayment() {
             &env,
             (
                 id.clone(),
-                (symbol_short!("ATTFEE"), a.schema_uid.clone(), a.attester.clone())
+                (
+                    symbol_short!("ATTFEE"),
+                    a.schema_uid.clone(),
+                    a.attester.clone()
+                )
                     .into_val(&env),
                 fee_event.into_val(&env),
             )

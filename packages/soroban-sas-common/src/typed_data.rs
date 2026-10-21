@@ -183,8 +183,14 @@ pub fn hash_scoped_attestation(
         }
         DelegationSchemaScope::Any => buf.append(&Bytes::from_slice(env, &[0u8])),
     }
-    buf.append(&Bytes::from_slice(env, &authorization.permissions.to_be_bytes()));
-    buf.append(&Bytes::from_slice(env, &authorization.valid_until.to_be_bytes()));
+    buf.append(&Bytes::from_slice(
+        env,
+        &authorization.permissions.to_be_bytes(),
+    ));
+    buf.append(&Bytes::from_slice(
+        env,
+        &authorization.valid_until.to_be_bytes(),
+    ));
     env.crypto().sha256(&buf).into()
 }
 

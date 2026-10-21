@@ -7,8 +7,7 @@ extern crate alloc;
 use soroban_sas_common::{
     Attestation, CompactAttestation, CompactAttestationKey, ContractUpgradedEvent,
     DelegationAuthorization, DelegationNonceKey, DelegationSchemaScope, SASError,
-    LEDGERS_IN_ONE_YEAR,
-    MAX_ATTESTATION_DATA_BYTES, UID,
+    LEDGERS_IN_ONE_YEAR, MAX_ATTESTATION_DATA_BYTES, UID,
 };
 use soroban_sdk::{
     contract, contractimpl, contracttype, panic_with_error, symbol_short, token, Address, Bytes,
@@ -770,7 +769,10 @@ impl SAS {
             nonce,
         };
         let digest = soroban_sas_common::hash_scoped_attestation(
-            &env, &attestation, &domain, &authorization,
+            &env,
+            &attestation,
+            &domain,
+            &authorization,
         );
         soroban_sas_common::verify_offchain_signature(&env, &digest, &public_key, &signature);
         Self::consume_delegation_nonce(&env, &attestation.attester, nonce);

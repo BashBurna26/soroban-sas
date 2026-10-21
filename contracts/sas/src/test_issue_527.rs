@@ -60,7 +60,10 @@ fn signature(
         nonce,
     };
     let digest = hash_scoped_attestation(
-        env, a, &domain, &DelegationAuthorization {
+        env,
+        a,
+        &domain,
+        &DelegationAuthorization {
             schema_scope: scope.clone(),
             permissions: DELEGATION_PERMISSION_ISSUE,
             valid_until: 0,
