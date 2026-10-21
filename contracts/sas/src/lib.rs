@@ -2195,6 +2195,8 @@ mod test_issue_293;
 #[cfg(test)]
 mod test_issue_296;
 #[cfg(test)]
+mod test_issue_492;
+#[cfg(test)]
 mod test_round_trip;
 #[cfg(test)]
 mod test_timestamp;
