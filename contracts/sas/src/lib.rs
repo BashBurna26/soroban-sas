@@ -1711,6 +1711,7 @@ impl SAS {
         let mut authorized_attesters = soroban_sdk::Map::new(&env);
         // Map lookup avoids scanning all previously authorized attesters.
         for attestation in attestations.into_iter() {
+            require_unpaid_allowed(&env, &attestation);
             if !authorized_attesters.contains_key(attestation.attester.clone()) {
                 attestation.attester.require_auth();
                 authorized_attesters.set(attestation.attester.clone(), true);
