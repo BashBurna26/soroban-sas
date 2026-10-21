@@ -35,7 +35,11 @@ pub fn publish_attested(env: &Env, attestation: &Attestation) {
 pub fn publish_attestation_with_fee(env: &Env, attestation: &Attestation, fee_amount: i128) {
     use soroban_sas_common::{AttestationIssuedWithFeeEvent, ATTFEE};
     env.events().publish(
-        (ATTFEE, attestation.schema_uid.clone(), attestation.attester.clone()),
+        (
+            ATTFEE,
+            attestation.schema_uid.clone(),
+            attestation.attester.clone(),
+        ),
         AttestationIssuedWithFeeEvent {
             uid: attestation.uid.clone(),
             schema_uid: attestation.schema_uid.clone(),
@@ -291,7 +295,10 @@ pub fn publish_protocol_paused(env: &Env, authorizer: Address) {
     use soroban_sas_common::{ProtocolPauseEvent, PROTOCOL_PAUSED};
     env.events().publish(
         (PROTOCOL_PAUSED, authorizer.clone()),
-        ProtocolPauseEvent { authorizer, timestamp: env.ledger().timestamp() },
+        ProtocolPauseEvent {
+            authorizer,
+            timestamp: env.ledger().timestamp(),
+        },
     );
 }
 
@@ -299,6 +306,9 @@ pub fn publish_protocol_unpaused(env: &Env, authorizer: Address) {
     use soroban_sas_common::{ProtocolPauseEvent, PROTOCOL_UNPAUSED};
     env.events().publish(
         (PROTOCOL_UNPAUSED, authorizer.clone()),
-        ProtocolPauseEvent { authorizer, timestamp: env.ledger().timestamp() },
+        ProtocolPauseEvent {
+            authorizer,
+            timestamp: env.ledger().timestamp(),
+        },
     );
 }

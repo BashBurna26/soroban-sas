@@ -145,10 +145,17 @@ fn fee_quote(env: &Env, schema_uid: &UID, size: u32) -> i128 {
     {
         return 0;
     }
-    let base = env.storage().instance().get::<_, (Address, i128)>(&FEE_CONFIG)
-        .map(|(_, amount)| amount).unwrap_or(0);
+    let base = env
+        .storage()
+        .instance()
+        .get::<_, (Address, i128)>(&FEE_CONFIG)
+        .map(|(_, amount)| amount)
+        .unwrap_or(0);
     let per_byte: i128 = env.storage().instance().get(&FEE_PER_BYTE).unwrap_or(0);
-    match per_byte.checked_mul(i128::from(size)).and_then(|extra| base.checked_add(extra)) {
+    match per_byte
+        .checked_mul(i128::from(size))
+        .and_then(|extra| base.checked_add(extra))
+    {
         Some(value) => value,
         None => panic_with_error!(env, SASError::InvalidValue),
     }
@@ -180,7 +187,6 @@ fn require_delegation_policy(env: &Env, attester: &Address, schema_uid: &UID) {
         panic_with_error!(env, SASError::DelegationScopeDenied);
     }
 }
-
 
 /// Marks `multi_attest` as in progress, rejecting a nested invocation.
 ///
@@ -506,15 +512,17 @@ impl SAS {
         attester.require_auth();
         let key = (DELEGATION_POLICY, attester);
         env.storage().persistent().set(&key, &policy);
-        env.storage().persistent().extend_ttl(
-            &key, LEDGERS_IN_ONE_YEAR, LEDGERS_IN_ONE_YEAR,
-        );
+        env.storage()
+            .persistent()
+            .extend_ttl(&key, LEDGERS_IN_ONE_YEAR, LEDGERS_IN_ONE_YEAR);
         extend_instance_ttl(&env);
     }
 
     pub fn get_delegation_policy(env: Env, attester: Address) -> Option<DelegationPolicy> {
         extend_instance_ttl(&env);
-        env.storage().persistent().get(&(DELEGATION_POLICY, attester))
+        env.storage()
+            .persistent()
+            .get(&(DELEGATION_POLICY, attester))
     }
 
     /// Emergency pause: blocks all write operations while keeping read-only
@@ -642,9 +650,9 @@ impl SAS {
         let key = (ZERO_FEE_SCHEMA, schema_uid);
         if enabled {
             env.storage().persistent().set(&key, &true);
-            env.storage().persistent().extend_ttl(
-                &key, LEDGERS_IN_ONE_YEAR, LEDGERS_IN_ONE_YEAR,
-            );
+            env.storage()
+                .persistent()
+                .extend_ttl(&key, LEDGERS_IN_ONE_YEAR, LEDGERS_IN_ONE_YEAR);
         } else {
             env.storage().persistent().remove(&key);
         }
@@ -762,7 +770,12 @@ impl SAS {
             nonce,
         };
         let digest = soroban_sas_common::hash_scoped_attestation(
-            &env, &attestation, &domain, &authorized_schema_uid, permissions, valid_until,
+            &env,
+            &attestation,
+            &domain,
+            &authorized_schema_uid,
+            permissions,
+            valid_until,
         );
         soroban_sas_common::verify_offchain_signature(&env, &digest, &public_key, &signature);
         Self::consume_delegation_nonce(&env, &attestation.attester, nonce);
@@ -822,11 +835,7 @@ impl SAS {
         let accepted = env.try_invoke_contract::<bool, soroban_sdk::Error>(
             &verifier,
             &Symbol::new(&env, "verify_proof"),
-            soroban_sdk::vec![
-                &env,
-                proof.into_val(&env),
-                public_inputs.into_val(&env),
-            ],
+            soroban_sdk::vec![&env, proof.into_val(&env), public_inputs.into_val(&env),],
         );
         if !matches!(accepted, Ok(Ok(true))) {
             panic_with_error!(&env, SASError::InvalidZKProof);
@@ -837,15 +846,17 @@ impl SAS {
         attestation.attester.require_auth();
         let uid = Self::attest_internal(env.clone(), attestation);
         env.storage().persistent().set(&key, &true);
-        env.storage().persistent().extend_ttl(
-            &key, LEDGERS_IN_ONE_YEAR, LEDGERS_IN_ONE_YEAR,
-        );
+        env.storage()
+            .persistent()
+            .extend_ttl(&key, LEDGERS_IN_ONE_YEAR, LEDGERS_IN_ONE_YEAR);
         uid
     }
 
     pub fn is_zk_nullifier_used(env: Env, nullifier: BytesN<32>) -> bool {
         extend_instance_ttl(&env);
-        env.storage().persistent().has(&ZkNullifierKey::Used(nullifier))
+        env.storage()
+            .persistent()
+            .has(&ZkNullifierKey::Used(nullifier))
     }
 
     /// Issues a batch of off-chain-signed attestations in one relayed

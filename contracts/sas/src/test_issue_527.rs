@@ -1,4 +1,4 @@
-use crate::{DelegationPolicy, SASClient, SAS, DELEGATION_PERMISSION_ISSUE};
+use crate::{DelegationPolicy, SASClient, DELEGATION_PERMISSION_ISSUE, SAS};
 use ed25519_dalek::{Signer, SigningKey};
 use soroban_sas_common::{
     attestation_uid, hash_offchain_attestation, hash_scoped_attestation, Attestation,
@@ -16,12 +16,17 @@ fn fixture() -> (Env, SASClient<'static>, Address, Address, SigningKey, Address)
     let client = SASClient::new(&env, &id);
     client.init(&Address::generate(&env), &registry);
     let signing_key = SigningKey::from_bytes(&[23u8; 32]);
-    let account = stellar_strkey::ed25519::PublicKey(
-        signing_key.verifying_key().to_bytes(),
-    )
-    .to_string();
+    let account =
+        stellar_strkey::ed25519::PublicKey(signing_key.verifying_key().to_bytes()).to_string();
     let attester = Address::from_string(&SorobanString::from_str(&env, &account));
-    (env, client, id, attester, signing_key, Address::generate(&env))
+    (
+        env,
+        client,
+        id,
+        attester,
+        signing_key,
+        Address::generate(&env),
+    )
 }
 
 fn attestation(env: &Env, attester: &Address, recipient: &Address, schema: u8) -> Attestation {
@@ -55,14 +60,7 @@ fn signature(
         contract: id.clone(),
         nonce,
     };
-    let digest = hash_scoped_attestation(
-        env,
-        a,
-        &domain,
-        scope,
-        DELEGATION_PERMISSION_ISSUE,
-        0,
-    );
+    let digest = hash_scoped_attestation(env, a, &domain, scope, DELEGATION_PERMISSION_ISSUE, 0);
     BytesN::from_array(env, &key.sign(&digest.to_array()).to_bytes())
 }
 

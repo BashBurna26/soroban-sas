@@ -1,8 +1,6 @@
 use crate::{SASClient, SAS};
 use soroban_sas_common::{attestation_uid, Attestation, SASError, UID};
-use soroban_sdk::{
-    testutils::Address as _, Address, Bytes, BytesN, Env, Vec,
-};
+use soroban_sdk::{testutils::Address as _, Address, Bytes, BytesN, Env, Vec};
 
 fn fixture() -> (Env, SASClient<'static>, Address, Address, Address, Address) {
     let env = Env::default();
@@ -53,13 +51,19 @@ fn paid_issuance_quotes_per_byte_and_rejects_underpayment() {
     );
     assert!(!sas.verify_attestation(&a.uid));
     sas.attest_with_value(&a, &token, &132);
-    assert_eq!(soroban_sdk::token::Client::new(&env, &token).balance(&id), 132);
+    assert_eq!(
+        soroban_sdk::token::Client::new(&env, &token).balance(&id),
+        132
+    );
 
     let free = attestation(&env, &issuer, &recipient, 3);
     sas.set_schema_zero_fee(&free.schema_uid, &true);
     assert_eq!(sas.quote_attestation_fee(&free.schema_uid, &16), 0);
     sas.attest_with_value(&free, &token, &0);
-    assert_eq!(soroban_sdk::token::Client::new(&env, &token).balance(&id), 132);
+    assert_eq!(
+        soroban_sdk::token::Client::new(&env, &token).balance(&id),
+        132
+    );
     sas.set_schema_zero_fee(&free.schema_uid, &false);
     assert_eq!(sas.quote_attestation_fee(&free.schema_uid, &16), 132);
 }
@@ -73,7 +77,10 @@ fn emergency_pause_blocks_mutations_but_keeps_reads() {
     assert!(sas.is_paused());
     let b = attestation(&env, &issuer, &recipient, 3);
     assert_eq!(sas.try_attest(&b), Err(Ok(SASError::ProtocolPaused.into())));
-    assert_eq!(sas.try_revoke(&a.uid), Err(Ok(SASError::ProtocolPaused.into())));
+    assert_eq!(
+        sas.try_revoke(&a.uid),
+        Err(Ok(SASError::ProtocolPaused.into()))
+    );
     assert_eq!(
         sas.try_replace_attestation(&a.uid, &b),
         Err(Ok(SASError::ProtocolPaused.into()))
