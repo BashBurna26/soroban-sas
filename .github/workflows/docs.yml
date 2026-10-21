@@ -35,7 +35,7 @@ jobs:
       - name: Build Rust documentation with warnings denied
         env:
           RUSTDOCFLAGS: -D warnings
-        run: cargo doc -p soroban-sas-sdk --no-deps
+        run: cargo doc -p soroban-sas-sdk --no-deps --target-dir target/rust-api
       - name: Verify Rust documentation examples
         run: cargo test -p soroban-sas-sdk --doc
       - name: Build TypeScript documentation
@@ -43,17 +43,16 @@ jobs:
         run: |
           npm ci
           npm run typecheck
-          npx --yes --package typedoc@0.26.11 typedoc --entryPoints src/index.ts --out ../../target/doc/typescript --readme README.md --skipErrorChecking false
+          npx --yes --package typedoc@0.26.11 typedoc --entryPoints src/index.ts --out ../../target/site/typescript --readme README.md --skipErrorChecking false
       - name: Prepare unified landing page
         run: |
-          mkdir -p target/doc/rust
-          cp -a target/doc/soroban_sas_sdk target/doc/rust/
-          cp -a target/doc/implementors target/doc/rust/ 2>/dev/null || true
-          cp docs/api-index.html target/doc/index.html
+          mkdir -p target/site/rust
+          cp -a target/rust-api/doc/. target/site/rust/
+          cp docs/api-index.html target/site/index.html
       - uses: actions/upload-artifact@v4
         with:
           name: sdk-api-docs
-          path: target/doc
+          path: target/site
           retention-days: 7
 
   publish:
