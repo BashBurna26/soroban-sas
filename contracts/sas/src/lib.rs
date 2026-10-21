@@ -153,6 +153,15 @@ fn fee_quote(env: &Env, schema_uid: &UID, size: u32) -> i128 {
     }
 }
 
+/// Prevent fee bypass through legacy no-payment issuance entrypoints when the
+/// opt-in size-based fee policy is enabled. Exempt schemas remain free.
+fn require_unpaid_allowed(env: &Env, attestation: &Attestation) {
+    let rate: i128 = env.storage().instance().get(&FEE_PER_BYTE).unwrap_or(0);
+    if rate > 0 && fee_quote(env, &attestation.schema_uid, attestation.data.len()) > 0 {
+        panic_with_error!(env, SASError::InsufficientFee);
+    }
+}
+
 /// Enforces a root-attester-approved policy even on the legacy delegated
 /// entrypoints, so calling an older API cannot bypass an active restriction.
 fn require_delegation_policy(env: &Env, attester: &Address, schema_uid: &UID) {
@@ -677,6 +686,7 @@ impl SAS {
         if is_paused_status(&env) {
             panic_with_error!(&env, SASError::ProtocolPaused);
         }
+        require_unpaid_allowed(&env, &attestation);
         attestation.attester.require_auth();
         Self::attest_internal(env, attestation)
     }
@@ -694,6 +704,7 @@ impl SAS {
         if attestation.revocation_time != 0 {
             panic_with_error!(&env, SASError::AlreadyRevoked);
         }
+        require_unpaid_allowed(&env, &attestation);
         Self::require_attester_key(&env, &attestation.attester, &public_key);
         require_delegation_policy(&env, &attestation.attester, &attestation.schema_uid);
         let domain = soroban_sas_common::AttestationDomain {
@@ -729,6 +740,7 @@ impl SAS {
         if attestation.revocation_time != 0 {
             panic_with_error!(&env, SASError::AlreadyRevoked);
         }
+        require_unpaid_allowed(&env, &attestation);
         if permissions & DELEGATION_PERMISSION_ISSUE == 0
             || (valid_until != 0 && env.ledger().timestamp() > valid_until)
             || authorized_schema_uid.as_ref().is_some_and(|uid| uid != &attestation.schema_uid)
@@ -781,6 +793,7 @@ impl SAS {
         if is_paused_status(&env) {
             panic_with_error!(&env, SASError::ProtocolPaused);
         }
+        require_unpaid_allowed(&env, &attestation);
         if proof.is_empty() || proof.len() > 4096 {
             panic_with_error!(&env, SASError::InvalidZKProof);
         }
@@ -881,6 +894,7 @@ impl SAS {
             if attestation.revocation_time != 0 {
                 panic_with_error!(&env, SASError::AlreadyRevoked);
             }
+            require_unpaid_allowed(&env, &attestation);
             Self::require_attester_key(&env, &attestation.attester, &public_key);
             require_delegation_policy(&env, &attestation.attester, &attestation.schema_uid);
             let domain = soroban_sas_common::AttestationDomain {
@@ -1517,6 +1531,7 @@ impl SAS {
         if is_paused_status(&env) {
             panic_with_error!(&env, SASError::ProtocolPaused);
         }
+        require_unpaid_allowed(&env, &new_data);
         extend_instance_ttl(&env);
         let Some(old) = read_attestation(&env, &old_uid) else {
             panic_with_error!(&env, SASError::AttestationNotFound);
