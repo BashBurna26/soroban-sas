@@ -87,6 +87,15 @@ pub struct AttestationDomain {
     pub nonce: u64,
 }
 
+/// Soroban's pinned testutils XDR encoder cannot derive Option<UID> fields
+/// inside contract types. This explicit variant encodes the same policy.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum DelegationSchemaScope {
+    Any,
+    Only(crate::UID),
+}
+
 /// Hashes the domain separator.
 pub fn hash_domain(env: &Env, domain: &AttestationDomain) -> BytesN<32> {
     let mut buf = Bytes::from_slice(env, DOMAIN_TYPE_TAG);
@@ -149,7 +158,7 @@ pub fn hash_scoped_attestation(
     env: &Env,
     attestation: &Attestation,
     domain: &AttestationDomain,
-    scope: &Option<crate::UID>,
+    scope: &DelegationSchemaScope,
     permissions: u32,
     valid_until: u64,
 ) -> BytesN<32> {
@@ -159,11 +168,11 @@ pub fn hash_scoped_attestation(
         &hash_offchain_attestation(env, attestation, domain).to_array(),
     ));
     match scope {
-        Some(schema) => {
+        DelegationSchemaScope::Only(schema) => {
             buf.append(&Bytes::from_slice(env, &[1u8]));
             buf.append(&Bytes::from_slice(env, &schema.0.to_array()));
         }
-        None => buf.append(&Bytes::from_slice(env, &[0u8])),
+        DelegationSchemaScope::Any => buf.append(&Bytes::from_slice(env, &[0u8])),
     }
     buf.append(&Bytes::from_slice(env, &permissions.to_be_bytes()));
     buf.append(&Bytes::from_slice(env, &valid_until.to_be_bytes()));

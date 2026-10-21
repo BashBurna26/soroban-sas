@@ -39,7 +39,7 @@ use crate::strkey::{parse_address, AddressKind};
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use soroban_sas_common::{
     hash_delegated_revocation, hash_offchain_attestation, hash_scoped_attestation, Attestation,
-    AttestationDomain, UID,
+    AttestationDomain, DelegationSchemaScope, UID,
 };
 use soroban_sdk::{Address, Bytes, BytesN, Env};
 
@@ -149,14 +149,15 @@ pub fn sign_scoped_attestation(
     nonce: u64,
     network_passphrase: &str,
     contract_id: &str,
-    authorized_schema_uid: Option<UID>,
+    authorized_schema_uid: DelegationSchemaScope,
     permissions: u32,
     valid_until: u64,
 ) -> Result<DelegationSignature, SdkError> {
     if permissions & 1 == 0
-        || authorized_schema_uid
-            .as_ref()
-            .is_some_and(|schema| schema != &attestation.schema_uid)
+        || matches!(
+            &authorized_schema_uid,
+            DelegationSchemaScope::Only(schema) if schema != &attestation.schema_uid
+        )
     {
         return Err(SdkError::ValidationError(
             "delegation scope does not authorize this attestation".to_string(),

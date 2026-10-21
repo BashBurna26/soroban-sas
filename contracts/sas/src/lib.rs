@@ -6,7 +6,8 @@ extern crate alloc;
 
 use soroban_sas_common::{
     Attestation, CompactAttestation, CompactAttestationKey, ContractUpgradedEvent,
-    DelegationNonceKey, SASError, LEDGERS_IN_ONE_YEAR, MAX_ATTESTATION_DATA_BYTES, UID,
+    DelegationNonceKey, DelegationSchemaScope, SASError, LEDGERS_IN_ONE_YEAR,
+    MAX_ATTESTATION_DATA_BYTES, UID,
 };
 use soroban_sdk::{
     contract, contractimpl, contracttype, panic_with_error, symbol_short, token, Address, Bytes, BytesN, Env, IntoVal,
@@ -44,7 +45,7 @@ pub const DELEGATION_PERMISSION_ISSUE: u32 = 1;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DelegationPolicy {
     /// None allows any registered schema. Some(uid) limits the key to uid.
-    pub authorized_schema_uid: Option<UID>,
+    pub authorized_schema_uid: DelegationSchemaScope,
     pub permissions: u32,
     /// Zero has no expiry; otherwise the last valid ledger timestamp.
     pub valid_until: u64,
@@ -171,7 +172,10 @@ fn require_delegation_policy(env: &Env, attester: &Address, schema_uid: &UID) {
     };
     if policy.permissions & DELEGATION_PERMISSION_ISSUE == 0
         || (policy.valid_until != 0 && env.ledger().timestamp() > policy.valid_until)
-        || policy.authorized_schema_uid.as_ref().is_some_and(|uid| uid != schema_uid)
+        || matches!(
+            &policy.authorized_schema_uid,
+            DelegationSchemaScope::Only(uid) if uid != schema_uid
+        )
     {
         panic_with_error!(env, SASError::DelegationScopeDenied);
     }
@@ -730,7 +734,7 @@ impl SAS {
         nonce: u64,
         signature: BytesN<64>,
         public_key: BytesN<32>,
-        authorized_schema_uid: Option<UID>,
+        authorized_schema_uid: DelegationSchemaScope,
         permissions: u32,
         valid_until: u64,
     ) -> UID {
@@ -743,7 +747,10 @@ impl SAS {
         require_unpaid_allowed(&env, &attestation);
         if permissions & DELEGATION_PERMISSION_ISSUE == 0
             || (valid_until != 0 && env.ledger().timestamp() > valid_until)
-            || authorized_schema_uid.as_ref().is_some_and(|uid| uid != &attestation.schema_uid)
+            || matches!(
+                &authorized_schema_uid,
+                DelegationSchemaScope::Only(uid) if uid != &attestation.schema_uid
+            )
         {
             panic_with_error!(&env, SASError::DelegationScopeDenied);
         }
@@ -1762,7 +1769,7 @@ impl SAS {
             panic_with_error!(&env, SASError::InsufficientFee);
         }
         match configured {
-            Some((fee_token, fee_amount)) => {
+            Some((fee_token, _fee_amount)) => {
                 if token != fee_token || value != required {
                     panic_with_error!(&env, SASError::FeeMismatch);
                 }
