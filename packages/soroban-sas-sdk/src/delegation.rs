@@ -39,7 +39,7 @@ use crate::strkey::{parse_address, AddressKind};
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use soroban_sas_common::{
     hash_delegated_revocation, hash_offchain_attestation, hash_scoped_attestation, Attestation,
-    AttestationDomain, DelegationSchemaScope, UID,
+    AttestationDomain, DelegationAuthorization, DelegationSchemaScope, UID,
 };
 use soroban_sdk::{Address, Bytes, BytesN, Env};
 
@@ -149,13 +149,11 @@ pub fn sign_scoped_attestation(
     nonce: u64,
     network_passphrase: &str,
     contract_id: &str,
-    authorized_schema_uid: DelegationSchemaScope,
-    permissions: u32,
-    valid_until: u64,
+    authorization: &DelegationAuthorization,
 ) -> Result<DelegationSignature, SdkError> {
-    if permissions & 1 == 0
+    if authorization.permissions & 1 == 0
         || matches!(
-            &authorized_schema_uid,
+            &authorization.schema_scope,
             DelegationSchemaScope::Only(schema) if schema != &attestation.schema_uid
         )
     {
@@ -168,15 +166,7 @@ pub fn sign_scoped_attestation(
     require_attester_key(env, &attestation.attester, &public_key)?;
 
     let domain = delegation_domain(env, network_passphrase, contract_id, nonce)?;
-    let digest = hash_scoped_attestation(
-        env,
-        attestation,
-        &domain,
-        &authorized_schema_uid,
-        permissions,
-        valid_until,
-    )
-    .to_array();
+    let digest = hash_scoped_attestation(env, attestation, &domain, authorization).to_array();
     Ok(DelegationSignature {
         nonce,
         public_key,

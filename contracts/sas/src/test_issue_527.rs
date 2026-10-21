@@ -2,7 +2,7 @@ use crate::{DelegationPolicy, SASClient, DELEGATION_PERMISSION_ISSUE, SAS};
 use ed25519_dalek::{Signer, SigningKey};
 use soroban_sas_common::{
     attestation_uid, hash_offchain_attestation, hash_scoped_attestation, Attestation,
-    AttestationDomain, DelegationSchemaScope, SASError, UID,
+    AttestationDomain, DelegationAuthorization, DelegationSchemaScope, SASError, UID,
 };
 use soroban_sdk::{testutils::Address as _, Address, Bytes, BytesN, Env, String as SorobanString};
 
@@ -59,7 +59,13 @@ fn signature(
         contract: id.clone(),
         nonce,
     };
-    let digest = hash_scoped_attestation(env, a, &domain, scope, DELEGATION_PERMISSION_ISSUE, 0);
+    let digest = hash_scoped_attestation(
+        env, a, &domain, &DelegationAuthorization {
+            schema_scope: scope.clone(),
+            permissions: DELEGATION_PERMISSION_ISSUE,
+            valid_until: 0,
+        },
+    );
     BytesN::from_array(env, &key.sign(&digest.to_array()).to_bytes())
 }
 
@@ -91,9 +97,11 @@ fn signed_scope_restricts_schema_and_wildcard_remains_valid() {
             &1,
             &bad_signature,
             &public_key,
-            &DelegationSchemaScope::Only(b.schema_uid.clone()),
-            &DELEGATION_PERMISSION_ISSUE,
-            &0,
+            &DelegationAuthorization {
+                schema_scope: DelegationSchemaScope::Only(b.schema_uid.clone()),
+                permissions: DELEGATION_PERMISSION_ISSUE,
+                valid_until: 0,
+            },
         ),
         Err(Ok(SASError::DelegationScopeDenied.into()))
     );
@@ -110,9 +118,11 @@ fn signed_scope_restricts_schema_and_wildcard_remains_valid() {
         &1,
         &good_signature,
         &public_key,
-        &DelegationSchemaScope::Only(a.schema_uid.clone()),
-        &DELEGATION_PERMISSION_ISSUE,
-        &0,
+        &DelegationAuthorization {
+            schema_scope: DelegationSchemaScope::Only(a.schema_uid.clone()),
+            permissions: DELEGATION_PERMISSION_ISSUE,
+            valid_until: 0,
+        },
     );
     assert!(sas.verify_attestation(&a.uid));
 
@@ -144,9 +154,11 @@ fn signed_scope_restricts_schema_and_wildcard_remains_valid() {
             &2,
             &good_signature,
             &public_key,
-            &DelegationSchemaScope::Any,
-            &DELEGATION_PERMISSION_ISSUE,
-            &0,
+            &DelegationAuthorization {
+                schema_scope: DelegationSchemaScope::Any,
+                permissions: DELEGATION_PERMISSION_ISSUE,
+                valid_until: 0,
+            },
         )
         .is_err());
     sas.attest_by_scoped_delegation(
@@ -154,9 +166,11 @@ fn signed_scope_restricts_schema_and_wildcard_remains_valid() {
         &2,
         &wildcard_sig,
         &public_key,
-        &DelegationSchemaScope::Any,
-        &DELEGATION_PERMISSION_ISSUE,
-        &0,
+        &DelegationAuthorization {
+            schema_scope: DelegationSchemaScope::Any,
+            permissions: DELEGATION_PERMISSION_ISSUE,
+            valid_until: 0,
+        },
     );
     assert!(sas.verify_attestation(&b.uid));
 }

@@ -96,6 +96,17 @@ pub enum DelegationSchemaScope {
     Only(crate::UID),
 }
 
+/// Scope, permissions and expiry explicitly signed by the issuer.
+/// Keeping these related fields in a single contract type also avoids
+/// argument-heavy generated client methods under strict Clippy.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DelegationAuthorization {
+    pub schema_scope: DelegationSchemaScope,
+    pub permissions: u32,
+    pub valid_until: u64,
+}
+
 /// Hashes the domain separator.
 pub fn hash_domain(env: &Env, domain: &AttestationDomain) -> BytesN<32> {
     let mut buf = Bytes::from_slice(env, DOMAIN_TYPE_TAG);
@@ -158,24 +169,22 @@ pub fn hash_scoped_attestation(
     env: &Env,
     attestation: &Attestation,
     domain: &AttestationDomain,
-    scope: &DelegationSchemaScope,
-    permissions: u32,
-    valid_until: u64,
+    authorization: &DelegationAuthorization,
 ) -> BytesN<32> {
     let mut buf = Bytes::from_slice(env, b"SorobanSAS ScopedDelegation v1");
     buf.append(&Bytes::from_slice(
         env,
         &hash_offchain_attestation(env, attestation, domain).to_array(),
     ));
-    match scope {
+    match &authorization.schema_scope {
         DelegationSchemaScope::Only(schema) => {
             buf.append(&Bytes::from_slice(env, &[1u8]));
             buf.append(&Bytes::from_slice(env, &schema.0.to_array()));
         }
         DelegationSchemaScope::Any => buf.append(&Bytes::from_slice(env, &[0u8])),
     }
-    buf.append(&Bytes::from_slice(env, &permissions.to_be_bytes()));
-    buf.append(&Bytes::from_slice(env, &valid_until.to_be_bytes()));
+    buf.append(&Bytes::from_slice(env, &authorization.permissions.to_be_bytes()));
+    buf.append(&Bytes::from_slice(env, &authorization.valid_until.to_be_bytes()));
     env.crypto().sha256(&buf).into()
 }
 

@@ -6,7 +6,8 @@ extern crate alloc;
 
 use soroban_sas_common::{
     Attestation, CompactAttestation, CompactAttestationKey, ContractUpgradedEvent,
-    DelegationNonceKey, DelegationSchemaScope, SASError, LEDGERS_IN_ONE_YEAR,
+    DelegationAuthorization, DelegationNonceKey, DelegationSchemaScope, SASError,
+    LEDGERS_IN_ONE_YEAR,
     MAX_ATTESTATION_DATA_BYTES, UID,
 };
 use soroban_sdk::{
@@ -742,9 +743,7 @@ impl SAS {
         nonce: u64,
         signature: BytesN<64>,
         public_key: BytesN<32>,
-        authorized_schema_uid: DelegationSchemaScope,
-        permissions: u32,
-        valid_until: u64,
+        authorization: DelegationAuthorization,
     ) -> UID {
         if is_paused_status(&env) {
             panic_with_error!(&env, SASError::ProtocolPaused);
@@ -753,10 +752,11 @@ impl SAS {
             panic_with_error!(&env, SASError::AlreadyRevoked);
         }
         require_unpaid_allowed(&env, &attestation);
-        if permissions & DELEGATION_PERMISSION_ISSUE == 0
-            || (valid_until != 0 && env.ledger().timestamp() > valid_until)
+        if authorization.permissions & DELEGATION_PERMISSION_ISSUE == 0
+            || (authorization.valid_until != 0
+                && env.ledger().timestamp() > authorization.valid_until)
             || matches!(
-                &authorized_schema_uid,
+                &authorization.schema_scope,
                 DelegationSchemaScope::Only(uid) if uid != &attestation.schema_uid
             )
         {
@@ -770,12 +770,7 @@ impl SAS {
             nonce,
         };
         let digest = soroban_sas_common::hash_scoped_attestation(
-            &env,
-            &attestation,
-            &domain,
-            &authorized_schema_uid,
-            permissions,
-            valid_until,
+            &env, &attestation, &domain, &authorization,
         );
         soroban_sas_common::verify_offchain_signature(&env, &digest, &public_key, &signature);
         Self::consume_delegation_nonce(&env, &attestation.attester, nonce);
