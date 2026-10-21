@@ -141,6 +141,35 @@ pub fn hash_offchain_attestation(
     env.crypto().sha256(&buf).into()
 }
 
+/// Separately domain-separated signed authorization for a schema-scoped
+/// delegated issuance (#527). A wildcard delegation sets `scope` to `None`.
+/// The signed digest commits to the exact attestation, schema scope, permission
+/// bitmask and expiry. Legacy signatures are deliberately not accepted here.
+pub fn hash_scoped_attestation(
+    env: &Env,
+    attestation: &Attestation,
+    domain: &AttestationDomain,
+    scope: &Option<crate::UID>,
+    permissions: u32,
+    valid_until: u64,
+) -> BytesN<32> {
+    let mut buf = Bytes::from_slice(env, b"SorobanSAS ScopedDelegation v1");
+    buf.append(&Bytes::from_slice(
+        env,
+        &hash_offchain_attestation(env, attestation, domain).to_array(),
+    ));
+    match scope {
+        Some(schema) => {
+            buf.append(&Bytes::from_slice(env, &[1u8]));
+            buf.append(&Bytes::from_slice(env, &schema.0.to_array()));
+        }
+        None => buf.append(&Bytes::from_slice(env, &[0u8])),
+    }
+    buf.append(&Bytes::from_slice(env, &permissions.to_be_bytes()));
+    buf.append(&Bytes::from_slice(env, &valid_until.to_be_bytes()));
+    env.crypto().sha256(&buf).into()
+}
+
 /// Computes the digest for a delegated on-chain revocation. The domain binds
 /// the action to one network, one SAS contract, and one nonce; the body binds
 /// it to the exact attestation UID and its recorded attester.
