@@ -10,8 +10,8 @@ use soroban_sas_common::{
     MAX_ATTESTATION_DATA_BYTES, UID,
 };
 use soroban_sdk::{
-    contract, contractimpl, contracttype, panic_with_error, symbol_short, token, Address, Bytes, BytesN, Env, IntoVal,
-    Symbol, TryFromVal, Val,
+    contract, contractimpl, contracttype, panic_with_error, symbol_short, token, Address, Bytes,
+    BytesN, Env, IntoVal, Symbol, TryFromVal, Val,
 };
 
 mod events;

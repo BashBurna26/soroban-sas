@@ -4,11 +4,16 @@ use soroban_sas_common::{
     attestation_uid, hash_offchain_attestation, hash_scoped_attestation, Attestation,
     AttestationDomain, DelegationSchemaScope, SASError, UID,
 };
-use soroban_sdk::{
-    testutils::Address as _, Address, Bytes, BytesN, Env, String as SorobanString,
-};
+use soroban_sdk::{testutils::Address as _, Address, Bytes, BytesN, Env, String as SorobanString};
 
-fn fixture() -> (Env, SASClient<'static>, Address, Address, SigningKey, Address) {
+fn fixture() -> (
+    Env,
+    SASClient<'static>,
+    Address,
+    Address,
+    SigningKey,
+    Address,
+) {
     let env = Env::default();
     env.mock_all_auths();
     let registry = env.register_contract(None, crate::test::mock1::MockRegistry);
