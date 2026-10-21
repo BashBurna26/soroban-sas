@@ -6,14 +6,14 @@
 use soroban_sas_common::{
     events::{
         CONTRACT_UPGRADED, SCHEMA_DELEGATE_ADDED, SCHEMA_DELEGATE_REMOVED, SCHEMA_DEPRECATED,
-        SCHEMA_FEE_UPDATED, SCHEMA_FROST_GROUP_UPDATED, SCHEMA_OWNERSHIP_PROPOSED,
-        SCHEMA_OWNERSHIP_TRANSFERRED, TREASURY_UPDATED,
+        SCHEMA_FEE_UPDATED, SCHEMA_FROST_GROUP_UPDATED, SCHEMA_MERKLE_ROOT_UPDATED,
+        SCHEMA_OWNERSHIP_PROPOSED, SCHEMA_OWNERSHIP_TRANSFERRED, TREASURY_UPDATED,
     },
     validate_frost_group, validate_schema_syntax, ContractUpgradedEvent, FrostGroup,
     PreviousAddress, RevocationPolicy, SASError, SchemaDelegateAddedEvent,
     SchemaDelegateRemovedEvent, SchemaDeprecatedEvent, SchemaFeeUpdatedEvent,
-    SchemaFrostGroupUpdatedEvent, SchemaOwnershipProposedEvent, SchemaOwnershipTransferredEvent,
-    SchemaRecord, TreasuryUpdatedEvent, LEDGERS_IN_ONE_YEAR, UID,
+    SchemaFrostGroupUpdatedEvent, SchemaMerkleRootUpdatedEvent, SchemaOwnershipProposedEvent,
+    SchemaOwnershipTransferredEvent, SchemaRecord, TreasuryUpdatedEvent, LEDGERS_IN_ONE_YEAR, UID,
 };
 use soroban_sdk::{
     contract, contractimpl, contracttype, panic_with_error, token, Address, BytesN, Env, String,
@@ -1299,6 +1299,103 @@ impl SchemaRegistry {
                 .extend_ttl(&key, LEDGERS_IN_ONE_YEAR, LEDGERS_IN_ONE_YEAR);
         }
         group
+    }
+
+    /// Declares, or rotates, the Merkle root that governs delegated leaf-
+    /// verification for attestations under `uid` (#529).
+    ///
+    /// Only a schema owner (the creator, a member of the configured owner set)
+    /// or the registry admin may declare the root, and `authorizer` must
+    /// authorize the call. The merkle root is a 32-byte hash that serves as
+    /// the root of a Merkle tree whose leaves are attestation data payloads.
+    ///
+    /// Once set, SAS uses the Merkle root to verify off-chain leaf inclusion
+    /// proofs via `verify_merkle_leaf` for schemas that declare it. The stored
+    /// `SchemaRecord` is unchanged, so the XDR layout of existing schemas is
+    /// preserved.
+    ///
+    /// Emits `SchemaMerkleRootUpdated` with the new root, so indexers and
+    /// wallets can discover the requirement without polling.
+    pub fn set_schema_merkle_root(
+        env: Env,
+        authorizer: Address,
+        uid: UID,
+        merkle_root: BytesN<32>,
+    ) {
+        extend_instance_ttl(&env);
+        authorizer.require_auth();
+        if Self::get_schema(env.clone(), uid.clone()).is_none() {
+            panic_with_error!(&env, SASError::SchemaNotFound);
+        }
+        if !is_owner_address(&env, &uid, &authorizer) {
+            panic_with_error!(&env, SASError::Unauthorized);
+        }
+
+        let key = (MERKLE_ROOT, uid.clone());
+        env.storage().persistent().set(&key, &merkle_root);
+        env.storage()
+            .persistent()
+            .extend_ttl(&key, LEDGERS_IN_ONE_YEAR, LEDGERS_IN_ONE_YEAR);
+
+        env.events().publish(
+            (SCHEMA_MERKLE_ROOT_UPDATED, uid.clone()),
+            SchemaMerkleRootUpdatedEvent {
+                schema_uid: uid,
+                authorizer,
+                enabled: true,
+                merkle_root,
+                threshold: 1,
+            },
+        );
+
+        extend_instance_ttl(&env);
+    }
+
+    /// Clears a schema's Merkle root requirement (#529), restoring the
+    /// ordinary single-attestation paths for `uid`. Same authorization as
+    /// [`Self::set_schema_merkle_root`]. Removing a root that was never
+    /// configured is a no-op write plus an event, so callers can retry safely.
+    pub fn clear_schema_merkle_root(env: Env, authorizer: Address, uid: UID) {
+        extend_instance_ttl(&env);
+        authorizer.require_auth();
+        if Self::get_schema(env.clone(), uid.clone()).is_none() {
+            panic_with_error!(&env, SASError::SchemaNotFound);
+        }
+        if !is_owner_address(&env, &uid, &authorizer) {
+            panic_with_error!(&env, SASError::Unauthorized);
+        }
+
+        let key = (MERKLE_ROOT, uid.clone());
+        env.storage().persistent().remove(&key);
+
+        env.events().publish(
+            (SCHEMA_MERKLE_ROOT_UPDATED, uid.clone()),
+            SchemaMerkleRootUpdatedEvent {
+                schema_uid: uid,
+                authorizer,
+                enabled: false,
+                merkle_root: BytesN::from_array(&env, &[0u8; 32]),
+                threshold: 0,
+            },
+        );
+
+        extend_instance_ttl(&env);
+    }
+
+    /// Returns the Merkle root `uid` requires for delegated leaf-verification,
+    /// or `None` when the schema uses the ordinary single-attestation path (#529).
+    /// Renews the group entry's TTL when present; the missing path writes
+    /// nothing.
+    pub fn get_schema_merkle_root(env: Env, uid: UID) -> Option<BytesN<32>> {
+        extend_instance_ttl(&env);
+        let key = (MERKLE_ROOT, uid);
+        let root: Option<BytesN<32>> = env.storage().persistent().get(&key);
+        if root.is_some() {
+            env.storage()
+                .persistent()
+                .extend_ttl(&key, LEDGERS_IN_ONE_YEAR, LEDGERS_IN_ONE_YEAR);
+        }
+        root
     }
 
     /// Registers a new schema, paying the configured registration fee (#1).

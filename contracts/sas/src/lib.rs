@@ -8,8 +8,10 @@ extern crate alloc;
 mod frost_test;
 
 use soroban_sas_common::{
+    merkle::{verify_proof, MerkleRoot},
     Attestation, CompactAttestation, CompactAttestationKey, ContractUpgradedEvent,
-    DelegationNonceKey, FrostGroup, SASError, LEDGERS_IN_ONE_YEAR, MAX_ATTESTATION_DATA_BYTES, UID,
+    DelegationNonceKey, FrostGroup, MerkleProofStep, SASError, SchemaMerkleRootUpdatedEvent,
+    LEDGERS_IN_ONE_YEAR, MAX_ATTESTATION_DATA_BYTES, UID,
 };
 use soroban_sdk::{
     contract, contractimpl, panic_with_error, symbol_short, token, Address, BytesN, Env, IntoVal,
@@ -2076,6 +2078,47 @@ impl SAS {
     pub fn verify_attestation(env: Env, uid: UID) -> bool {
         extend_instance_ttl(&env);
         verify_attestation_record(&env, &uid)
+    }
+
+    /// Verifies that an off-chain attestation leaf is included in the schema's
+    /// Merkle tree root, enabling selective disclosure of attestation data (#529).
+    ///
+    /// This helper checks that:
+    /// - The parent attestation for `uid` is active, non-expired, and non-revoked
+    /// - The provided `leaf_data` combined with `proof` produces the expected Merkle root
+    /// - The `index` is valid for the given proof path
+    ///
+    /// Returns `true` when the leaf is valid, `false` otherwise.
+    pub fn verify_merkle_leaf(
+        env: Env,
+        uid: UID,
+        leaf_data: soroban_sdk::Bytes,
+        proof: soroban_sdk::Vec<soroban_sdk::BytesN<32>>,
+        index: u32,
+    ) -> bool {
+        // Check that the schema has a Merkle root configured
+        let registry = require_registry(&env);
+        let root = env.try_invoke_contract::<soroban_sdk::BytesN<32>, soroban_sdk::Error>(
+            &registry,
+            &Symbol::new(&env, "get_schema_merkle_root"),
+            soroban_sdk::vec![&env, uid.clone().into_val(&env)],
+        );
+        let root = env
+            .try_invoke_contract::<soroban_sdk::BytesN<32>, soroban_sdk::Error>(
+                &registry,
+                &Symbol::new(&env, "get_schema_merkle_root"),
+                soroban_sdk::vec![&env, uid.clone().into_val(&env)],
+            )
+            .expect("Merkle root not found");
+
+        // Verify the proof reconstructs the root from the leaf
+        let proof_steps: soroban_sdk::Vec<MerkleProofStep> = soroban_sdk::Vec::new(&env);
+        for sibling in proof.iter() {
+            proof_steps.push_back(MerkleProofStep { sibling: sibling });
+        }
+        let computed_root = verify_proof(&env, &MerkleRoot(root), &leaf_data, &proof_steps);
+
+        computed_root
     }
 
     /// Verify a batch of attestations in one call (#297).
