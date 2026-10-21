@@ -2459,3 +2459,10 @@ mod test_round_trip;
 mod test_timestamp;
 #[cfg(test)]
 mod verify_batch_test;
+
+#[cfg(test)]
+mod test_issue_526_530;
+#[cfg(test)]
+mod test_issue_527;
+#[cfg(test)]
+mod test_issue_531;
