@@ -1,6 +1,11 @@
 use crate::{SASClient, SAS};
-use soroban_sas_common::{attestation_uid, Attestation, SASError, UID};
-use soroban_sdk::{testutils::Address as _, Address, Bytes, BytesN, Env, Vec};
+use soroban_sas_common::{
+    attestation_uid, Attestation, AttestationIssuedWithFeeEvent, SASError, UID,
+};
+use soroban_sdk::{
+    symbol_short, testutils::Address as _, testutils::Events as _,
+    Address, Bytes, BytesN, Env, IntoVal, Vec,
+};
 
 fn fixture() -> (Env, SASClient<'static>, Address, Address, Address, Address) {
     let env = Env::default();
@@ -54,6 +59,26 @@ fn paid_issuance_quotes_per_byte_and_rejects_underpayment() {
     assert_eq!(
         soroban_sdk::token::Client::new(&env, &token).balance(&id),
         132
+    );
+    let fee_event = AttestationIssuedWithFeeEvent {
+        uid: a.uid.clone(),
+        schema_uid: a.schema_uid.clone(),
+        attester: a.attester.clone(),
+        recipient: a.recipient.clone(),
+        fee_amount: 132,
+    };
+    let events = env.events().all();
+    assert_eq!(
+        events.slice(events.len() - 1..),
+        soroban_sdk::vec![
+            &env,
+            (
+                id.clone(),
+                (symbol_short!("ATTFEE"), a.schema_uid.clone(), a.attester.clone())
+                    .into_val(&env),
+                fee_event.into_val(&env),
+            )
+        ]
     );
 
     let free = attestation(&env, &issuer, &recipient, 3);
