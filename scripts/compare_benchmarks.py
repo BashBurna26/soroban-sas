@@ -25,7 +25,7 @@ def compare(before, after, threshold):
              "|---|---:|---:|---:|---|"]
     regressed = []
     for key in keys:
-        diff = 100 * (after[key] / before[key] - 1)
+        diff = 100 * (after[key] - before[key]) / before[key]
         failed = diff > threshold
         if failed:
             regressed.append(key)
