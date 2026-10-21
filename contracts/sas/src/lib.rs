@@ -750,6 +750,84 @@ impl SAS {
         Self::attest_internal(env, attestation)
     }
 
+    /// Install a trusted verifier contract that implements
+    /// `verify_proof(proof: Bytes, public_inputs: Vec<BytesN<32>>) -> bool`.
+    /// The verifier MUST actually check a Groth16 or UltraPlonk proof against
+    /// a pinned verification key. This SAS contract never accepts a hash
+    /// prefix, an unverified assertion, or a self-declared proof as sufficient.
+    pub fn set_zk_verifier(env: Env, verifier: Address) {
+        let admin = require_admin(&env);
+        admin.require_auth();
+        env.storage().instance().set(&ZK_VERIFIER, &verifier);
+        extend_instance_ttl(&env);
+    }
+
+    pub fn get_zk_verifier(env: Env) -> Option<Address> {
+        extend_instance_ttl(&env);
+        env.storage().instance().get(&ZK_VERIFIER)
+    }
+
+    /// Transactionally verify and consume a private credential proof before
+    /// issuing the corresponding attestation (#531). Public inputs are
+    /// canonically bound to (attestation UID, schema UID, nullifier), avoiding
+    /// proof substitution across issuers or schemas. A failed issuance rolls
+    /// back nullifier consumption and any verifier-side writes.
+    pub fn attest_with_zk(
+        env: Env,
+        attestation: Attestation,
+        proof: Bytes,
+        nullifier: BytesN<32>,
+    ) -> UID {
+        if is_paused_status(&env) {
+            panic_with_error!(&env, SASError::ProtocolPaused);
+        }
+        if proof.is_empty() || proof.len() > 4096 {
+            panic_with_error!(&env, SASError::InvalidZKProof);
+        }
+        let key = ZkNullifierKey::Used(nullifier.clone());
+        if env.storage().persistent().has(&key) {
+            panic_with_error!(&env, SASError::NullifierAlreadyUsed);
+        }
+        let Some(verifier) = env.storage().instance().get::<_, Address>(&ZK_VERIFIER) else {
+            panic_with_error!(&env, SASError::InvalidZKProof);
+        };
+        // A ZK verifier sees only commitment-like public values; the private
+        // witness stays off-chain. The circuit must enforce the same ordering.
+        let public_inputs = soroban_sdk::vec![
+            &env,
+            attestation.uid.0.clone(),
+            attestation.schema_uid.0.clone(),
+            nullifier,
+        ];
+        let accepted = env.try_invoke_contract::<bool, soroban_sdk::Error>(
+            &verifier,
+            &Symbol::new(&env, "verify_proof"),
+            soroban_sdk::vec![
+                &env,
+                proof.into_val(&env),
+                public_inputs.into_val(&env),
+            ],
+        );
+        if !matches!(accepted, Ok(Ok(true))) {
+            panic_with_error!(&env, SASError::InvalidZKProof);
+        }
+
+        // The ZK proof authenticates the private statement, but does not
+        // replace issuer authorization in SAS's existing schema policy.
+        attestation.attester.require_auth();
+        let uid = Self::attest_internal(env.clone(), attestation);
+        env.storage().persistent().set(&key, &true);
+        env.storage().persistent().extend_ttl(
+            &key, LEDGERS_IN_ONE_YEAR, LEDGERS_IN_ONE_YEAR,
+        );
+        uid
+    }
+
+    pub fn is_zk_nullifier_used(env: Env, nullifier: BytesN<32>) -> bool {
+        extend_instance_ttl(&env);
+        env.storage().persistent().has(&ZkNullifierKey::Used(nullifier))
+    }
+
     /// Issues a batch of off-chain-signed attestations in one relayed
     /// transaction. Companion to
     /// `attest_by_delegation`, mirroring how
