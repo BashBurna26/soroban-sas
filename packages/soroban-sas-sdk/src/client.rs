@@ -3547,6 +3547,7 @@ mod tests {
             resolver: resolver.clone(),
             revocable: true,
             deprecated: false,
+            parent_schema_uid: None,
         };
 
         // Existing schema returns Some(SchemaRecord)
@@ -3613,6 +3614,7 @@ mod tests {
             resolver: resolver.clone(),
             revocable: true,
             deprecated: false,
+            parent_schema_uid: None,
         };
 
         let opt: Option<SchemaRecord> = Some(record.clone());
