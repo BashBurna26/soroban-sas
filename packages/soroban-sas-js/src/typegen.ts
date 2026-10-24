@@ -218,7 +218,7 @@ function decodeValue(type: SchemaType, value: ScVal): unknown {
     return new Map(map.map((entry) => [decodeValue(type.key, entry.key()), decodeValue(type.value, entry.val())]));
   }
   const n = normalizePrimitive(type.name);
-  if (["string", "symbol"].includes(n)) return n === "symbol" ? value.sym() : value.str().toString();
+  if (["string", "symbol"].includes(n)) return n === "symbol" ? value.sym().toString() : value.str().toString();
   if (["address", "account"].includes(n)) return Address.fromScVal(value).toString();
   if (["bool", "boolean"].includes(n)) return value.b();
   if (n === "bytes" || n === "bytesn" || n.startsWith("bytesn<")) return new Uint8Array(value.bytes());
