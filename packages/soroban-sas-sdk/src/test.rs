@@ -314,7 +314,12 @@ fn test_attestation_builder_valid_recipient_regression() {
 /// Answers one JSON-RPC request on `stream` with a canned Soroban RPC
 /// response. `account_entry_xdr` and `transaction_data_xdr` are the base64
 /// XDR payloads the account-lookup and simulation steps need.
-fn serve_rpc(stream: TcpStream, account_entry_xdr: &str, transaction_data_xdr: &str) {
+fn serve_rpc(
+    stream: TcpStream,
+    account_entry_xdr: &str,
+    transaction_data_xdr: &str,
+    _envelope_xdr: &str,
+) {
     let mut reader = BufReader::new(stream.try_clone().unwrap());
     let mut request_line = String::new();
     if reader.read_line(&mut request_line).unwrap_or(0) == 0 {
@@ -445,6 +450,24 @@ fn test_attestation_builder_attestation_is_accepted_by_sas_client_attest() {
     };
     let transaction_data_xdr = transaction_data.to_xdr_base64(Limits::none()).unwrap();
 
+    // A well-formed V1 `TransactionEnvelope` for the mock `getTransaction`
+    // response, so the client's envelope-variant validation decodes it
+    // successfully and accepts it (the only variant the SDK supports).
+    let envelope_xdr = TransactionEnvelope::Tx(TransactionV1Envelope {
+        tx: Transaction {
+            source_account: MuxedAccount::Ed25519(Uint256(public_key)),
+            fee: 100,
+            seq_num: SequenceNumber(8),
+            cond: Preconditions::None,
+            memo: Memo::None,
+            operations: VecM::default(),
+            ext: TransactionExt::V0,
+        },
+        signatures: VecM::default(),
+    })
+    .to_xdr_base64(Limits::none())
+    .unwrap();
+
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!("http://{}/", listener.local_addr().unwrap());
     let server = std::thread::spawn(move || {
@@ -454,7 +477,12 @@ fn test_attestation_builder_attestation_is_accepted_by_sas_client_attest() {
         // process exits; nothing joins this thread.
         for stream in listener.incoming() {
             match stream {
-                Ok(stream) => serve_rpc(stream, &account_entry_xdr, &transaction_data_xdr),
+                Ok(stream) => serve_rpc(
+                    stream,
+                    &account_entry_xdr,
+                    &transaction_data_xdr,
+                    &envelope_xdr,
+                ),
                 Err(_) => break,
             }
         }
@@ -940,7 +968,7 @@ fn concurrent_reservations_via_the_manager_get_distinct_sequences() {
     let server = std::thread::spawn(move || {
         for stream in listener.incoming() {
             match stream {
-                Ok(stream) => serve_rpc(stream, &account_entry_xdr, ""),
+                Ok(stream) => serve_rpc(stream, &account_entry_xdr, "", ""),
                 Err(_) => break,
             }
         }

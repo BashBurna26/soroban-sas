@@ -12,10 +12,10 @@ mod mock {
     pub struct MockSas;
     #[contractimpl]
     impl MockSas {
-        #[allow(non_snake_case)]
-        pub fn SASV1(_env: Env) -> bool {
+        pub fn sasv1(_env: Env) -> bool {
             true
         }
+
 
         /// Mirrors the real SAS contract's cross-contract call into the
         /// indexer, so tests can prove the indexer accepts writes that
@@ -78,10 +78,6 @@ mod mock_attacker {
                     expiration_time.into_val(&env),
                 ],
             );
-        }
-        #[allow(non_snake_case)]
-        pub fn SASV1(_env: Env) -> bool {
-            true
         }
     }
 }

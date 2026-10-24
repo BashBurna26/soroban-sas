@@ -3,6 +3,7 @@
 use crate::account;
 use crate::errors::SdkError;
 use crate::rpc::{GetTransactionResult, LedgerEntryResult, RpcClient};
+use crate::schema_cache::SchemaCache;
 use crate::sequence::SequenceManager;
 use crate::signature;
 use crate::simulate;
@@ -10,7 +11,7 @@ use crate::strkey::{parse_address, AddressKind};
 use crate::transaction::{SubmissionPolicy, TransactionSubmitter};
 use crate::transaction_signer::TransactionSigner;
 use serde::{Deserialize, Serialize};
-use soroban_sas_common::{Attestation, SchemaRecord, UID};
+use soroban_sas_common::{Attestation, DelegatesStatus, SchemaRecord, UID};
 use soroban_sdk::xdr::{
     ContractDataDurability, ExtensionPoint, Hash, LedgerEntryData, LedgerKey,
     LedgerKeyContractData, Limits, Memo, MuxedAccount, Operation, OperationBody, Preconditions,
@@ -640,8 +641,55 @@ impl SASClient {
                 "RPC client is required on SASClient; configure it via with_rpc(...)".to_string(),
             )
         })?;
-        let _env = Env::default();
-        self.get_schema(rpc, registry_id, schema_uid)
+        let Some(cache) = &self.schema_cache else {
+            return self.get_schema(rpc, registry_id, schema_uid);
+        };
+
+        let (cached, expired) = cache.lookup(schema_uid)?;
+        if !expired {
+            if let Some(value) = cached {
+                return Ok(value);
+            }
+        } else if let Some(value) = cached {
+            if let Some(refresh_token) = cache.start_refresh(*schema_uid) {
+                let cache = cache.clone();
+                let refresh_rpc = rpc.clone();
+                let registry_id = registry_id.to_owned();
+                let uid = *schema_uid;
+                let refresh_cache = cache.clone();
+                let refresh = thread::Builder::new()
+                    .name("schema-cache-refresh".to_string())
+                    .spawn(move || {
+                        let result = SASClient::get_schema_from_registry(
+                            &refresh_rpc,
+                            &registry_id,
+                            &uid,
+                        );
+                        refresh_cache.finish_refresh(uid, refresh_token, result);
+                    });
+                if refresh.is_err() {
+                    cache.cancel_refresh(schema_uid, refresh_token);
+                    return self.refresh_schema(rpc, &registry_id, schema_uid, &cache);
+                }
+            }
+            return Ok(value);
+        }
+
+        let result = self.get_schema(rpc, registry_id, schema_uid)?;
+        cache.insert(*schema_uid, result.clone())?;
+        Ok(result)
+    }
+
+    fn refresh_schema(
+        &self,
+        rpc: &RpcClient,
+        registry_id: &str,
+        schema_uid: &[u8; 32],
+        cache: &SchemaCache,
+    ) -> Result<Option<SchemaRecord>, SdkError> {
+        let result = self.get_schema(rpc, registry_id, schema_uid)?;
+        cache.insert(*schema_uid, result.clone())?;
+        Ok(result)
     }
 
     /// Fetches a schema record by its raw definition from the configured
@@ -673,7 +721,14 @@ impl SASClient {
                 "RPC client is required on SASClient; configure it via with_rpc(...)".to_string(),
             )
         })?;
-        self.get_schema_by_content(rpc, registry_id, schema, resolver, revocable)
+        let result = self.get_schema_by_content(rpc, registry_id, schema, resolver, revocable)?;
+        if let Some(cache) = &self.schema_cache {
+            let uid = Self::compute_schema_uid(schema, resolver, revocable)
+                .0
+                .to_array();
+            cache.insert(uid, result.clone())?;
+        }
+        Ok(result)
     }
 
     /// Fetches the full `Attestation` record for `uid` via the
@@ -1418,6 +1473,67 @@ impl SASClient {
         )
     }
 
+    /// Calls `SchemaRegistry::add_delegate_with_expiry(schema_uid, delegate, expiry_timestamp)`.
+    ///
+    /// Requires `owner_secret_seed` to be the primary schema owner.
+    #[allow(clippy::too_many_arguments)]
+    pub fn add_delegate_with_expiry(
+        &self,
+        rpc: &RpcClient,
+        network_passphrase: &str,
+        owner_secret_seed: &[u8; 32],
+        registry_contract_id: &str,
+        schema_uid: &UID,
+        delegate: &str,
+        expiry_timestamp: u64,
+    ) -> Result<GetTransactionResult, SdkError> {
+        let env = &Env::default();
+        let delegate_addr = parse_address(env, delegate, AddressKind::Either, "delegate")?;
+        let args = vec![
+            simulate::encode_arg(env, schema_uid)?,
+            simulate::encode_arg(env, &delegate_addr)?,
+            simulate::encode_arg(env, &expiry_timestamp)?,
+        ];
+        self.submit_write(
+            rpc,
+            network_passphrase,
+            owner_secret_seed,
+            registry_contract_id,
+            "add_delegate_with_expiry",
+            args,
+        )
+    }
+
+    /// Calls `SchemaRegistry::self_revoke_delegate(uid, delegate)`: allows `delegate`
+    /// to self-revoke their delegation.
+    ///
+    /// Requires `delegate_secret_seed` to be the delegate.
+    #[allow(clippy::too_many_arguments)]
+    pub fn self_revoke_delegate(
+        &self,
+        rpc: &RpcClient,
+        network_passphrase: &str,
+        delegate_secret_seed: &[u8; 32],
+        registry_contract_id: &str,
+        schema_uid: &UID,
+        delegate: &str,
+    ) -> Result<GetTransactionResult, SdkError> {
+        let env = &Env::default();
+        let delegate_addr = parse_address(env, delegate, AddressKind::Either, "delegate")?;
+        let args = vec![
+            simulate::encode_arg(env, schema_uid)?,
+            simulate::encode_arg(env, &delegate_addr)?,
+        ];
+        self.submit_write(
+            rpc,
+            network_passphrase,
+            delegate_secret_seed,
+            registry_contract_id,
+            "self_revoke_delegate",
+            args,
+        )
+    }
+
     /// Calls `SchemaRegistry::transfer_schema_ownership(uid, new_owner)` (#229).
     /// Requires `owner_secret_seed` to be the current schema owner.
     #[allow(clippy::too_many_arguments)]
@@ -1659,6 +1775,18 @@ impl SASClient {
             simulate::encode_arg(env, &attester_addr)?,
         ];
         invoke_read_only(env, rpc, registry_contract_id, "is_authorized", args)
+    }
+
+    /// Queries active and expired delegates registered for `schema_uid`.
+    pub fn get_delegates(
+        &self,
+        rpc: &RpcClient,
+        registry_contract_id: &str,
+        schema_uid: &UID,
+    ) -> Result<DelegatesStatus, SdkError> {
+        let env = &Env::default();
+        let args = vec![simulate::encode_arg(env, schema_uid)?];
+        invoke_read_only(env, rpc, registry_contract_id, "get_delegates", args)
     }
 
     /// Calls `SAS::attest(attestation)`: builds the invoke transaction,
@@ -2639,6 +2767,23 @@ fn is_archived_error(msg: &str) -> bool {
 /// `secret_seed`. The contract requires `attester.require_auth()`, so a
 /// mismatch here can only ever fail on-chain — surfacing it locally saves a
 /// round trip and a wasted signature over a doomed transaction.
+#[allow(dead_code)]
+fn ensure_attester_matches_secret(
+    env: &Env,
+    secret_seed: &[u8; 32],
+    attestation: &Attestation,
+) -> Result<(), SdkError> {
+    let public_key = signature::derive_public_key(secret_seed);
+    let signer_strkey = stellar_strkey::ed25519::PublicKey(public_key).to_string();
+    let signer = Address::from_string(&SorobanString::from_str(env, &signer_strkey));
+    if signer != attestation.attester {
+        return Err(SdkError::ValidationError(
+            "attestation.attester does not match the account derived from secret_seed".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 /// Simulates a read-only call to `function_name` on `contract_id` and
 /// decodes its return value as `T`.
 fn invoke_read_only<T>(
@@ -3120,6 +3265,7 @@ mod tests {
     /// reset the connection, which `ureq` surfaces as a spurious transport
     /// error and made these tests flaky.
     fn spawn_mock_rpc_server(response_body: String) -> String {
+        use std::io::{BufRead, BufReader};
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let url = format!("http://{}/", listener.local_addr().unwrap());
         std::thread::spawn(move || {

@@ -39,6 +39,8 @@ pub const ADMIN_TRANSFER_COMPLETED: Symbol = symbol_short!("ADMCOMP");
 pub const SCHEMA_OWNERSHIP_TRANSFERRED: Symbol = symbol_short!("SCHOWN");
 /// First topic of every `SchemaOwnershipProposed` event (#446).
 pub const SCHEMA_OWNERSHIP_PROPOSED: Symbol = symbol_short!("SCHPROP");
+/// First topic of every `SchemaOwnershipTransferCancelled` event (#446).
+pub const SCHEMA_OWNERSHIP_CANCELLED: Symbol = symbol_short!("SCHCANC");
 /// First topic of every `NoncesInvalidated` event (#437).
 pub const NONCES_INVALIDATED: Symbol = symbol_short!("NONCEINV");
 /// First topic of every `BatchAttested` event.
@@ -84,6 +86,7 @@ pub struct AttestationIssuedEvent {
     pub attester: Address,
     pub recipient: Address,
 }
+
 
 /// Payload of the `AttestationRevoked` event.
 ///

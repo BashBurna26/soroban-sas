@@ -937,6 +937,25 @@ impl Indexer {
         extend_instance_ttl(&env);
     }
 
+    /// Marks `uid` as revoked so that filtered queries (with
+    /// `include_revoked = false`) hide it, without deleting its history.
+    /// Called best-effort by the SAS contract when an attestation is revoked.
+    pub fn handle_revoke(env: Env, uid: UID) {
+        extend_instance_ttl(&env);
+        set_index_status(&env, &uid, IndexStatus::Revoked);
+    }
+
+    /// Marks `old_uid` as replaced when an attestation is superseded via
+    /// `SAS::replace_attestation`, preserving history while hiding the old
+    /// entry from active filtered queries. `new_uid` remains `Active`.
+    pub fn handle_replace(env: Env, old_uid: UID, new_uid: UID) {
+        extend_instance_ttl(&env);
+        set_index_status(&env, &old_uid, IndexStatus::Replaced);
+        let _ = new_uid;
+    }
+
+    /// Returns the recorded [`IndexStatus`] for `uid`, or `None` when no status
+    /// has been recorded (legacy entries are implicitly `Active`).
     /// Returns the recorded [`IndexStatus`] for `uid`, or `None` when the
     /// UID was never indexed (or was indexed before status tracking existed).
     pub fn get_attestation_status(env: Env, uid: UID) -> Option<IndexStatus> {

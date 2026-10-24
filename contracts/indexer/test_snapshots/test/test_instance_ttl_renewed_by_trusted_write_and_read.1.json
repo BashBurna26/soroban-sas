@@ -1794,7 +1794,7 @@
                 "bytes": "0000000000000000000000000000000000000000000000000000000000000003"
               },
               {
-                "symbol": "SASV1"
+                "symbol": "sasv1"
               }
             ],
             "data": "void"
@@ -1815,7 +1815,7 @@
                 "symbol": "fn_return"
               },
               {
-                "symbol": "SASV1"
+                "symbol": "sasv1"
               }
             ],
             "data": {

@@ -407,3 +407,77 @@ pub fn check_revocable(
         attestation_revocable,
     )
 }
+
+/// Strict lexical validation of a schema definition string (#447).
+///
+/// Runs *before* [`validate_schema_syntax`] and rejects, with
+/// [`SASError::InvalidSchemaDefinition`], any string that:
+///
+/// * contains control characters, `DEL`, invalid UTF-8, or invisible / unicode
+///   whitespace (see [`contains_control_or_invalid_whitespace`]);
+/// * has a leading or trailing field delimiter (`,`);
+/// * uses non-canonical separators: two consecutive spaces anywhere, a space
+///   immediately before a comma, or more than one space after a comma.
+///
+/// Whitespace-only or empty strings are intentionally *not* rejected here;
+/// they fall through to [`validate_schema_syntax`], which reports them as
+/// [`SASError::InvalidSchema`]. This keeps the lexical layer focused on
+/// character-level hygiene and canonical spacing, while structural emptiness
+/// stays a syntax concern.
+pub fn validate_schema_lexical(_env: &Env, schema: &String) -> Result<(), SASError> {
+    let schema_len = schema.len() as usize;
+    if schema_len == 0 {
+        // Deferred to the syntax validator, which maps this to InvalidSchema.
+        return Ok(());
+    }
+    if schema_len > MAX_SCHEMA_LENGTH as usize {
+        return Err(SASError::InvalidSchemaDefinition);
+    }
+    let mut buf = [0u8; MAX_SCHEMA_LENGTH as usize];
+    schema.copy_into_slice(&mut buf[..schema_len]);
+    let bytes = &buf[..schema_len];
+
+    if contains_control_or_invalid_whitespace(bytes) {
+        return Err(SASError::InvalidSchemaDefinition);
+    }
+
+    // Canonical separator rules. All bytes here are guaranteed ASCII by the
+    // control/whitespace check above.
+    let mut index = 0usize;
+    while index < schema_len {
+        let byte = bytes[index];
+        if byte == b' ' {
+            // Two consecutive spaces are never canonical.
+            if index + 1 < schema_len && bytes[index + 1] == b' ' {
+                return Err(SASError::InvalidSchemaDefinition);
+            }
+            // A space immediately before a comma is a malformed separator.
+            if index + 1 < schema_len && bytes[index + 1] == b',' {
+                return Err(SASError::InvalidSchemaDefinition);
+            }
+        } else if byte == b',' {
+            // Trailing comma, or two commas with nothing (or only a space)
+            // between them, is malformed.
+            if index + 1 >= schema_len {
+                return Err(SASError::InvalidSchemaDefinition);
+            }
+            if bytes[index + 1] == b',' {
+                return Err(SASError::InvalidSchemaDefinition);
+            }
+            // At most one space may follow a comma.
+            if bytes[index + 1] == b' ' && index + 2 < schema_len && bytes[index + 2] == b' ' {
+                return Err(SASError::InvalidSchemaDefinition);
+            }
+        }
+        index += 1;
+    }
+
+    // Leading delimiter (ignoring a single canonical leading space is still a
+    // malformed schema, but that is left to the syntax validator; a leading
+    // comma, however, is unambiguously malformed).
+    if bytes[0] == b',' {
+        return Err(SASError::InvalidSchemaDefinition);
+    }
+
+    Ok(())
+}

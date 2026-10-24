@@ -26,6 +26,9 @@ For an in-depth look at how state is managed, the interactions between various s
 
 ## Security and Threat Mitigation
 
+For the authorization matrix, protocol invariants, threat scenarios and emergency runbook, see [Security Model and Threat Analysis](SECURITY_MODEL.md).
+
+
 Details about our security perimeter, administrative capabilities, and known vulnerabilities can be found in the [Security Assumptions and Threat Model](docs/security.md) guide.
 
 Dependency security checks and indexer fuzzing commands are described in [Contributing](CONTRIBUTING.md).
@@ -108,8 +111,10 @@ The workspace has evolved beyond initial mocks and now includes comprehensive do
   A collection of shell scripts to assist with local environment setup, contract deployment, and invocation.
 
 - `tools/schema-explorer`
-  A prototype read-only web dashboard for browsing a Schema Registry and validating draft schemas.
-  See the [Schema Explorer README](tools/schema-explorer/README.md).
+  A web dashboard for browsing a Schema Registry, validating draft schemas, and visually composing new schemas.
+  The visual Schema Builder lets you add fields for all supported Soroban types, configure resolvers, preview the
+  deterministic `schema_uid` in real time, register directly on testnet via Freighter, and copy ready-to-run CLI
+  commands and SDK snippets. See the [Schema Explorer README](tools/schema-explorer/README.md).
 
 - `tools/prometheus-exporter`
   A Prometheus metrics exporter that monitors SAS contract events and exposes metrics for observability.
@@ -384,6 +389,8 @@ TMPDIR=/tmp cargo test --workspace
 - [Batch Attestations (Merkle Commitments)](docs/batch-attestations.md):
   when to use off-chain Merkle batching instead of on-chain `multi_attest`,
   the normative leaf/node hashing rules, and a selective-disclosure example.
+- [Selective Disclosure (Merkle Root Attestations)](docs/selective-disclosure.md): attest to a Merkle root and reveal single claims with `verify_merkle_leaf`.
+- [Privacy Implications of Public Attestations](docs/privacy.md): what a public ledger exposes and how to keep sensitive data off-chain.
 - [Bulk Attestation Creation from CSV](docs/bulk-csv-attestations.md): the
   `attest bulk` CSV format, the validate-everything-before-submitting
   guarantee, `--dry-run`, and when to prefer Merkle batching instead.

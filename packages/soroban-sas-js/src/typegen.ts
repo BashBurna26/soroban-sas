@@ -173,9 +173,9 @@ function encodeValue(type: SchemaType, value: unknown, path: string): ScVal {
   }
   if (type.kind === "map") {
     const entries = value instanceof Map ? [...value.entries()] : (value && typeof value === "object" ? Object.entries(value) : invalid());
-    const encoded = entries.map(([key, item]) => new xdr.ScMapEntry({ key: encodeValue(type.key, key, `${path}.key`), val: encodeValue(type.value, item, `${path}[${String(key)}]`) }));
-    encoded.sort((a, b) => Buffer.compare(a.key().toXDR(), b.key().toXDR()));
-    return xdr.ScVal.scvMap(encoded);
+    const encoded = entries.map(([key, item]) => ({ key: encodeValue(type.key, key, `${path}.key`), val: encodeValue(type.value, item, `${path}[${String(key)}]`) }));
+    encoded.sort((a, b) => Buffer.compare(a.key.toXDR(), b.key.toXDR()));
+    return xdr.ScVal.scvMap(encoded.map(({ key, val }) => new xdr.ScMapEntry({ key, val })));
   }
   const name = normalizePrimitive(type.name);
   if (["string", "symbol"].includes(name) && typeof value === "string") return name === "symbol" ? xdr.ScVal.scvSymbol(value) : xdr.ScVal.scvString(value);
@@ -199,8 +199,10 @@ function encodeValue(type: SchemaType, value: unknown, path: string): ScVal {
 function decodeValue(type: SchemaType, value: ScVal): unknown {
   if (type.kind === "option") {
     const vals = value.vec();
-    if (!vals || vals.length === 1 && vals[0].sym().toString() === "None") return null;
-    if (!vals || vals.length !== 2 || vals[0].sym().toString() !== "Some") throw new Error("invalid encoded Option");
+    if (!vals || vals.length === 0) throw new Error("invalid encoded Option");
+    const tag = Buffer.from(vals[0].sym()).toString("utf8");
+    if (vals.length === 1 && tag === "None") return null;
+    if (vals.length !== 2 || tag !== "Some") throw new Error("invalid encoded Option");
     return decodeValue(type.item, vals[1]);
   }
   if (type.kind === "array" || type.kind === "vector" || type.kind === "tuple") {
