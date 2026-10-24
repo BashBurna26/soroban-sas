@@ -122,7 +122,7 @@ jobs:
       - run: cargo +stable install cargo-fuzz --version 0.13.2 --locked
       - run: cargo fuzz build differential_hashing_fuzz
       - run: cargo fuzz run differential_hashing_fuzz -- -runs=2000 -max_len=512 -rss_limit_mb=4096
-      - run: cargo +stable run --manifest-path fuzz/Cargo.toml --bin differential_fixture_export --quiet > /tmp/sas-hash-parity.ndjson
+      - run: cargo run --manifest-path fuzz/Cargo.toml --bin differential_fixture_export --quiet > /tmp/sas-hash-parity.ndjson
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
