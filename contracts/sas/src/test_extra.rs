@@ -129,6 +129,7 @@ fn test_verify_offchain_rejects_unknown_and_deprecated_schema() {
         revocable: true,
         schema: SorobanString::from_str(&env, "bool like_soroban"),
         deprecated: false,
+        parent_schema_uid: None,
     };
     let mock_client = mock_registry::MockRegistryClient::new(&env, &registry_id);
     // Need to store via contract call so storage is in contract's context
@@ -537,6 +538,7 @@ mod revocability {
             revocable: schema_revocable,
             schema: SorobanString::from_str(&env, "value String"),
             deprecated: false,
+            parent_schema_uid: None,
         };
         let mock_client = mock_registry::MockRegistryClient::new(&env, &registry_id);
         mock_client.set_schema(&schema_uid, &record);
@@ -704,6 +706,7 @@ mod revocability {
             revocable: false,
             schema: SorobanString::from_str(&fx.env, "value String"),
             deprecated: false,
+            parent_schema_uid: None,
         };
         let mock_client = mock_registry::MockRegistryClient::new(&fx.env, &fx.registry_id);
         mock_client.set_schema(&non_revocable_schema_uid, &non_revocable_record);
@@ -953,6 +956,7 @@ mod resolver_semantics {
             revocable: true,
             schema: SorobanString::from_str(&env, "value String"),
             deprecated: false,
+            parent_schema_uid: None,
         };
         let mock_client = mock_registry::MockRegistryClient::new(&env, &registry_id);
         mock_client.set_schema(&schema_uid, &record);
@@ -1086,6 +1090,7 @@ mod resolver_semantics {
             revocable: true,
             schema: SorobanString::from_str(&fx.env, "value String"),
             deprecated: false,
+            parent_schema_uid: None,
         };
         let mock_client = mock_registry::MockRegistryClient::new(&fx.env, &fx.registry_id);
         mock_client.set_schema(&rejecting_schema_uid, &rejecting_record);
@@ -1219,6 +1224,7 @@ mod revoke_resolver_semantics {
             revocable: true,
             schema: SorobanString::from_str(&env, "value String"),
             deprecated: false,
+            parent_schema_uid: None,
         };
         let mock_client = mock_registry::MockRegistryClient::new(&env, &registry_id);
         mock_client.set_schema(&schema_uid, &record);
