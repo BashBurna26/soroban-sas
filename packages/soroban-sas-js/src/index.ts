@@ -2,6 +2,7 @@ export * from "./types.js";
 export * from "./hashing.js";
 export * from "./delegation.js";
 export * from "./client.js";
+export * from "./resilient.js";
 export * from "./failover.js";
 export * from "./schema.js";
 export {
@@ -13,4 +14,3 @@ export {
   type SchemaType as TypegenSchemaType,
   parseSchema as parseTypegenSchema,
 } from "./typegen.js";
-

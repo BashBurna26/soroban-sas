@@ -20,6 +20,8 @@ import { Buffer } from "buffer";
 import { Client as ContractClient } from "@stellar/stellar-sdk/contract";
 import type { ClientOptions, SignTransaction } from "@stellar/stellar-sdk/contract";
 import type { Attestation, DelegatedAttestation, SchemaRecord, UID } from "./types.js";
+import { ResilientTransport } from "./resilient.js";
+import type { EndpointConfig, ResilienceOptions } from "./resilient.js";
 
 export interface SASClientConfig {
   /** SAS contract id (C...). */
@@ -28,7 +30,16 @@ export interface SASClientConfig {
   registryContractId?: string;
   /** Indexer contract id (C...); required for recipient/schema/attester index lookups. */
   indexerContractId?: string;
-  rpcUrl: string;
+  /** Soroban RPC URL. Required unless `endpoints` is given. */
+  rpcUrl?: string;
+  /**
+   * Multiple RPC endpoints with priority weights. Reads fail over between them
+   * (429/502/503/504, timeouts, network errors); writes go to one endpoint,
+   * once. When set, replaces `rpcUrl`.
+   */
+  endpoints?: EndpointConfig[];
+  /** Timeouts, retries, backoff, health thresholds, telemetry hook. */
+  resilience?: ResilienceOptions;
   networkPassphrase: string;
   /** Account (G...) that pays for and authorizes submitted transactions. */
   publicKey?: string;
@@ -63,96 +74,99 @@ function attestationArg(a: Attestation): Record<string, unknown> {
 
 /** Client for `SAS::*` and `SchemaRegistry::*` contract entry points. */
 export class SASClient {
-  private sasClient?: ContractClient;
-  private registryClient?: ContractClient;
-  private indexerClient?: ContractClient;
+  private readonly clients = new Map<string, Promise<ContractClient>>();
+  /** Endpoint health, failover routing and telemetry (`transport.on(...)`). */
+  readonly transport: ResilientTransport;
 
-  constructor(private readonly config: SASClientConfig) {}
+  constructor(private readonly config: SASClientConfig) {
+    const endpoints = config.endpoints ?? (config.rpcUrl ? [{ url: config.rpcUrl }] : []);
+    if (endpoints.length === 0) throw new Error("SASClientConfig requires rpcUrl or endpoints");
+    this.transport = new ResilientTransport(endpoints, config.resilience);
+  }
 
   private publicKey(): string | undefined {
     return this.config.publicKey;
   }
 
-  private async sas(): Promise<ContractClient> {
-    if (!this.sasClient) {
-      this.sasClient = await ContractClient.from({
-        contractId: this.config.contractId,
-        rpcUrl: this.config.rpcUrl,
+  /** Contract client bound to one endpoint (cached; a failed build is not cached). */
+  private clientFor(contractId: string, rpcUrl: string): Promise<ContractClient> {
+    const key = `${rpcUrl}|${contractId}`;
+    let c = this.clients.get(key);
+    if (!c) {
+      c = ContractClient.from({
+        contractId,
+        rpcUrl,
         networkPassphrase: this.config.networkPassphrase,
         publicKey: this.publicKey(),
         signTransaction: this.config.signTransaction,
         signAuthEntry: this.config.signAuthEntry,
       });
+      c.catch(() => this.clients.delete(key));
+      this.clients.set(key, c);
     }
-    return this.sasClient;
+    return c;
   }
 
-  private async registry(): Promise<ContractClient> {
+  private registryId(): string {
     if (!this.config.registryContractId) {
       throw new Error("SASClientConfig.registryContractId is required for schema methods");
     }
-    if (!this.registryClient) {
-      this.registryClient = await ContractClient.from({
-        contractId: this.config.registryContractId,
-        rpcUrl: this.config.rpcUrl,
-        networkPassphrase: this.config.networkPassphrase,
-        publicKey: this.publicKey(),
-        signTransaction: this.config.signTransaction,
-        signAuthEntry: this.config.signAuthEntry,
-      });
-    }
-    return this.registryClient;
+    return this.config.registryContractId;
   }
 
-  private async indexer(): Promise<ContractClient> {
+  private indexerId(): string {
     if (!this.config.indexerContractId) {
       throw new Error("SASClientConfig.indexerContractId is required for indexer methods");
     }
-    if (!this.indexerClient) {
-      this.indexerClient = await ContractClient.from({
-        contractId: this.config.indexerContractId,
-        rpcUrl: this.config.rpcUrl,
-        networkPassphrase: this.config.networkPassphrase,
-        publicKey: this.publicKey(),
-      });
-    }
-    return this.indexerClient;
+    return this.config.indexerContractId;
+  }
+
+  /** Read-only call: simulated, so safe to retry on any endpoint. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private read<T>(contractId: string, call: (client: any) => Promise<T>): Promise<T> {
+    return this.transport.read(async (url) => call(await this.clientFor(contractId, url)));
+  }
+
+  /** State-changing call: built and submitted on one endpoint, exactly once. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private write<T>(contractId: string, call: (client: any) => Promise<T>): Promise<T> {
+    return this.transport.write(async (url) => call(await this.clientFor(contractId, url)));
   }
 
   /** Reads indexed UIDs for a recipient without submitting a transaction. */
   async getRecipientAttestations(recipient: string): Promise<UID[]> {
-    const client = await this.indexer();
-    // The contract's Vec<UID> decodes to one-element arrays of 32-byte buffers.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const tx = await (client as any).get_attestations_by_recipient({ recipient });
-    if (!Array.isArray(tx.result)) {
-      throw new Error("Indexer returned malformed recipient attestation UIDs");
-    }
-    return tx.result.map((value: unknown): UID => {
-      const bytes = Array.isArray(value) && value.length === 1 ? value[0] : null;
-      if (!(bytes instanceof Uint8Array) || bytes.length !== 32) {
-        throw new Error("Indexer returned a malformed attestation UID");
+    return this.read(this.indexerId(), async (client) => {
+      // The contract's Vec<UID> decodes to one-element arrays of 32-byte buffers.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tx = await (client as any).get_attestations_by_recipient({ recipient });
+      if (!Array.isArray(tx.result)) {
+        throw new Error("Indexer returned malformed recipient attestation UIDs");
       }
-      return Buffer.from(bytes).toString("hex");
+      return tx.result.map((value: unknown): UID => {
+        const bytes = Array.isArray(value) && value.length === 1 ? value[0] : null;
+        if (!(bytes instanceof Uint8Array) || bytes.length !== 32) {
+          throw new Error("Indexer returned a malformed attestation UID");
+        }
+        return Buffer.from(bytes).toString("hex");
+      });
     });
   }
   /** Calls `SchemaRegistry::register(owner, schema, resolver, revocable)`. */
   async registerSchema(schema: string, resolver: string, revocable: boolean): Promise<UID> {
     const owner = this.publicKey();
     if (!owner) throw new Error("registerSchema requires config.publicKey");
-    const client = await this.registry();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const tx = await (client as any).register({ owner, schema, resolver, revocable });
-    const sent = await tx.signAndSend();
+    const sent = await this.write(this.registryId(), async (client) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tx = await (client as any).register({ owner, schema, resolver, revocable });
+      return tx.signAndSend();
+    });
     return Buffer.from(sent.result as unknown as Uint8Array).toString("hex");
   }
 
   /** Calls `SchemaRegistry::get_schema(uid)`. Read-only (simulated, not submitted). */
   async getSchema(uid: UID): Promise<SchemaRecord | null> {
-    const client = await this.registry();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const tx = await (client as any).get_schema({ uid: uidArg(uid) });
-    const record = tx.result as unknown as
+    const result = await this.read(this.registryId(), async (client) => (await client.get_schema({ uid: uidArg(uid) })).result);
+    const record = result as unknown as
       | { uid: [Buffer]; resolver: string; revocable: boolean; schema: string }
       | null;
     if (!record) return null;
@@ -166,42 +180,40 @@ export class SASClient {
 
   /** Calls `SAS::attest(attestation)` and submits the signed transaction. */
   async attest(attestation: Attestation): Promise<SubmitResult> {
-    const client = await this.sas();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const tx = await (client as any).attest({ attestation: attestationArg(attestation) });
-    const sent = await tx.signAndSend();
+    const sent = await this.write(this.config.contractId, async (client) => {
+      const tx = await client.attest({ attestation: attestationArg(attestation) });
+      return tx.signAndSend();
+    });
     return { hash: sent.sendTransactionResponse?.hash ?? "" };
   }
 
   /** Calls `SAS::attest_by_delegation`, relaying an off-chain-signed attestation. */
   async attestByDelegation(delegated: DelegatedAttestation): Promise<SubmitResult> {
-    const client = await this.sas();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const tx = await (client as any).attest_by_delegation({
-      attestation: attestationArg(delegated.attestation),
-      nonce: delegated.nonce,
-      signature: Buffer.from(delegated.signature),
-      public_key: Buffer.from(delegated.publicKey),
+    const sent = await this.write(this.config.contractId, async (client) => {
+      const tx = await client.attest_by_delegation({
+        attestation: attestationArg(delegated.attestation),
+        nonce: delegated.nonce,
+        signature: Buffer.from(delegated.signature),
+        public_key: Buffer.from(delegated.publicKey),
+      });
+      return tx.signAndSend();
     });
-    const sent = await tx.signAndSend();
     return { hash: sent.sendTransactionResponse?.hash ?? "" };
   }
 
   /** Calls `SAS::revoke(uid)`. */
   async revoke(uid: UID): Promise<SubmitResult> {
-    const client = await this.sas();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const tx = await (client as any).revoke({ uid: uidArg(uid) });
-    const sent = await tx.signAndSend();
+    const sent = await this.write(this.config.contractId, async (client) => {
+      const tx = await client.revoke({ uid: uidArg(uid) });
+      return tx.signAndSend();
+    });
     return { hash: sent.sendTransactionResponse?.hash ?? "" };
   }
 
   /** Calls `SAS::get_attestation(uid)`. Read-only (simulated, not submitted). */
   async getAttestation(uid: UID): Promise<Attestation | null> {
-    const client = await this.sas();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const tx = await (client as any).get_attestation({ uid: uidArg(uid) });
-    const raw = tx.result as unknown as
+    const result = await this.read(this.config.contractId, async (client) => (await client.get_attestation({ uid: uidArg(uid) })).result);
+    const raw = result as unknown as
       | {
           uid: [Buffer];
           schema_uid: [Buffer];
