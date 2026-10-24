@@ -29,9 +29,7 @@ pub enum SASError {
     AlreadyExpired = 204,
     DuplicateAttestation = 205,
     /// An attestation's revocability flag violated the schema's revocation
-    /// policy: an irrevocable attestation was issued under a `RevocableOnly`
-    /// schema. (The inverse violation — a revocable attestation under an
-    /// `IrrevocableOnly` schema — reuses `NotRevocable`.)
+    /// policy: irrevocable attestation under `RevocableOnly` schema.
     InvalidRevocability = 206,
 
     /// Authorization errors
@@ -90,13 +88,8 @@ pub enum SASError {
     InvalidTimeRange = 418,
     /// Expiration time exceeds schema's max_ttl or perpetual attestation under capped schema (#441).
     InvalidExpirationTime = 419,
-    /// `prune_expired` was called while the admin has not enabled
-    /// auto-pruning via `set_auto_prune` (#432).
-    AutoPruneDisabled = 420,
     /// A timestamp claim does not match the ledger anchor recorded for the
-    /// attestation (wrong sequence, doctored close time, a claim from a ledger
-    /// that has not closed yet, or an attempt to rewrite an anchor), or the
-    /// stored anchors are not monotonic (#436).
+    /// attestation, or stored anchors are not monotonic (#436).
     InvalidTimestamp = 420,
     /// No issuance or revocation timestamp anchor exists for the UID (#436).
     TimestampAnchorNotFound = 421,
@@ -109,6 +102,9 @@ pub enum SASError {
     InvalidToken = 424,
     /// The attester has exhausted their configured ledger-window quota.
     RateLimitExceeded = 425,
+    /// `prune_expired` was called while the admin has not enabled
+    /// auto-pruning via `set_auto_prune` (#432).
+    AutoPruneDisabled = 426,
 
     /// Circuit breaker errors
     /// The contract is paused and write operations are not permitted (#255).
@@ -128,6 +124,8 @@ pub enum SASError {
     /// A callback (resolver or indexer) re-entered `multi_attest` while the
     /// outer batch was still executing (#296).
     Reentrancy = 502,
-    /// A resolver callback attempted an indirect mutating call back into SAS.
-    ReentrancyDetected = 508,
+}
+
+impl SASError {
+    pub const ReentrancyDetected: SASError = SASError::Reentrancy;
 }

@@ -375,6 +375,9 @@ TMPDIR=/tmp cargo test --workspace
 - [Getting Started for DApp Developers](docs/getting-started.md): schema
   design, resolvers, issuance rules, off-chain and on-chain verification,
   indexer queries, and a security checklist.
+- [KYC/AML Verifiable Credential Attestation](docs/guides/kyc-aml-attestation.md):
+  end-to-end schema registration, backend issuance, frontend verification,
+  and privacy guidance for KYC/AML claims.
 - [Stellar SEP-8 Regulated Assets Guide](docs/guides/sep8-regulated-assets.md): complete
   technical walkthrough for issuing Stellar SEP-8 compliant regulated tokens with Soroban
   smart contracts, perpetual and expiring SAS attestations, issuer revocation flows, and
