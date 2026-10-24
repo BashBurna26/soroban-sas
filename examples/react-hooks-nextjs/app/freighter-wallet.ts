@@ -1,7 +1,7 @@
 "use client";
 
 import { requestAccess, getNetwork, signTransaction, signAuthEntry } from "@stellar/freighter-api";
-import { SASClient, type SASClientConfig } from "@soroban-sas/sdk";
+import { SASClient, type SASClientConfig } from "@soroban-sas/sdk/client";
 
 function fail(label: string, error: unknown): never {
   const detail = error instanceof Error ? error.message
