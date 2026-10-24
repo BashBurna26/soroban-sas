@@ -12,6 +12,7 @@
 # Exit code: 0 if every case passes, 1 otherwise.
 #
 set -euo pipefail
+unset GITHUB_REPOSITORY
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 

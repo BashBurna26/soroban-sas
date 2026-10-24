@@ -244,11 +244,7 @@ export class SASClient {
 
   /** Calls `Indexer::get_attestations_by_recipient(recipient)`. Read-only (simulated). */
   async getAttestationUidsByRecipient(recipient: string): Promise<UID[]> {
-    const client = await this.indexer();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const tx = await (client as any).get_attestations_by_recipient({ recipient });
-    const raw = (tx.result as unknown as Array<[Buffer]>) ?? [];
-    return raw.map((item) => Buffer.from(item[0]).toString("hex"));
+    return this.getRecipientAttestations(recipient);
   }
 
   /** Fetches all `Attestation` records indexed under `recipient`. */

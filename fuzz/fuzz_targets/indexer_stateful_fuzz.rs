@@ -1,6 +1,6 @@
 #![no_main]
 use libfuzzer_sys::fuzz_target;
-use soroban_sas_indexer_test_support::{check_chunking, MAX_INSERTIONS};
+use soroban_sas_indexer::chunking_test_support::{check_chunking, MAX_INSERTIONS};
 use std::collections::{HashMap, HashSet, VecDeque};
 
 const CHUNK_CAPACITY: usize = 50;

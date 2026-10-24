@@ -122,6 +122,10 @@ doc = false
 [[bin]]
 name = "differential_fixture_export"
 path = "tools/differential_fixture_export.rs"
+test = false
+doc = false
+
+[[bin]]
 name = "stateful_indexer_fuzz"
 path = "fuzz_targets/stateful_indexer_fuzz.rs"
 test = false
