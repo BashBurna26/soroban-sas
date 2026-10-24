@@ -8,10 +8,11 @@ extern crate alloc;
 mod frost_test;
 
 use soroban_sas_common::{
+    merkle::{verify_proof, MerkleRoot},
     Attestation, CompactAttestation, CompactAttestationKey, ContractUpgradedEvent,
     DelegationAuthorization, DelegationNonceKey, DelegationSchemaScope, FeeCeilings, FrostGroup,
-    RecipientConsentNonceKey, SASError, SchemaFeeConfig, LEDGERS_IN_ONE_YEAR,
-    MAX_ATTESTATION_DATA_BYTES, UID,
+    MerkleProofStep, RecipientConsentNonceKey, SASError, SchemaFeeConfig,
+    SchemaMerkleRootUpdatedEvent, LEDGERS_IN_ONE_YEAR, MAX_ATTESTATION_DATA_BYTES, UID,
 };
 use soroban_sdk::{
     contract, contractimpl, contracttype, panic_with_error, symbol_short, token, Address, Bytes,
@@ -1233,6 +1234,16 @@ impl SAS {
         soroban_sas_common::hash_offchain_attestation(&env, &attestation, &domain)
     }
 
+    /// Issues an attestation endorsed by an off-chain ed25519 signature and
+    /// relayed by any funded account.
+    ///
+    /// When the schema declares a FROST threshold group (#534), `public_key`
+    /// must be that group's public key and `signature` a standard 64-byte
+    /// Ed25519 aggregate produced by at least `threshold` shares. The attester
+    /// account key and registered attester keys are not accepted for such a
+    /// schema. A FROST aggregate has exactly the same shape as a single-signer
+    /// signature, so this entrypoint's calldata and its single
+    /// `ed25519_verify` cost are unchanged.
     pub fn attest_by_delegation(
         env: Env,
         attestation: Attestation,
@@ -1248,7 +1259,6 @@ impl SAS {
             panic_with_error!(&env, SASError::AlreadyRevoked);
         }
         require_unpaid_allowed(&env, &attestation);
-        Self::require_attester_key(&env, &attestation.attester, &public_key);
         require_delegation_policy(&env, &attestation.attester, &attestation.schema_uid);
         Self::require_nonce_not_replayed(&env, &attestation.attester, nonce);
         let group = Self::require_delegation_key(
@@ -1448,7 +1458,6 @@ impl SAS {
                 panic_with_error!(&env, SASError::AlreadyRevoked);
             }
             require_unpaid_allowed(&env, &attestation);
-            Self::require_attester_key(&env, &attestation.attester, &public_key);
             require_delegation_policy(&env, &attestation.attester, &attestation.schema_uid);
             Self::require_nonce_not_replayed(&env, &attestation.attester, nonce);
             let group = Self::require_delegation_key(
@@ -3712,6 +3721,7 @@ mod test_issue_293;
 mod test_issue_296;
 #[cfg(test)]
 mod test_issue_432;
+#[cfg(test)]
 mod test_issue_492;
 #[cfg(test)]
 mod test_merkle_disclosure;

@@ -157,7 +157,6 @@ signature, nonce check, or replacement rolls back both nonces and all state.
 
 Recipient consent only applies to this entrypoint; `replace_attestation`
 continues to support the existing direct attester-authorized path.
-
 ## Batch delegation
 
 Issuers that produce many signatures (for example an offline job that signs a

@@ -67,6 +67,12 @@ pub const SCHEMA_QUARANTINE_URI: Symbol = symbol_short!("QUARURI");
 /// byte-stable for existing deployments.
 pub const FROST_GROUP: Symbol = symbol_short!("FROSTGRP");
 
+/// Storage key for a schema's required Merkle root (#529).
+/// Stored under `(MERKLE_ROOT, schema_uid) -> BytesN<32>`. Kept beside the
+/// schema record rather than inside it so `SchemaRecord`'s XDR layout remains
+/// byte-stable for existing deployments.
+pub const MERKLE_ROOT: Symbol = symbol_short!("MERKROOT");
+
 /// Storage key for the in-flight multi-signature ownership transfer.
 /// Stored under `(PENDING_OWNERSHIP, schema_uid) -> PendingOwnershipTransfer`
 /// and removed as soon as the transfer is executed, cancelled, or invalidated
