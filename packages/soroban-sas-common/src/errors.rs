@@ -86,6 +86,9 @@ pub enum SASError {
     InvalidTimeRange = 418,
     /// Expiration time exceeds schema's max_ttl or perpetual attestation under capped schema (#441).
     InvalidExpirationTime = 419,
+    /// `prune_expired` was called while the admin has not enabled
+    /// auto-pruning via `set_auto_prune` (#432).
+    AutoPruneDisabled = 420,
     /// A timestamp claim does not match the ledger anchor recorded for the
     /// attestation (wrong sequence, doctored close time, a claim from a ledger
     /// that has not closed yet, or an attempt to rewrite an anchor), or the
