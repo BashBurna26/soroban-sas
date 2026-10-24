@@ -16,8 +16,9 @@
 // exercised against a live RPC node in this environment — see
 // packages/soroban-sas-js/README.md's "Scope and limitations" section.
 
-import { Client as ContractClient, basicNodeSigner } from "@stellar/stellar-sdk/contract";
-import { Keypair } from "@stellar/stellar-sdk";
+import { Buffer } from "buffer";
+import { Client as ContractClient } from "@stellar/stellar-sdk/contract";
+import type { ClientOptions, SignTransaction } from "@stellar/stellar-sdk/contract";
 import type { Attestation, DelegatedAttestation, SchemaRecord, UID } from "./types.js";
 
 export interface SASClientConfig {
@@ -31,8 +32,10 @@ export interface SASClientConfig {
   networkPassphrase: string;
   /** Account (G...) that pays for and authorizes submitted transactions. */
   publicKey?: string;
-  /** ed25519 secret seed (S...) for `publicKey`; enables signAndSend. */
-  secret?: string;
+  /** Browser wallet callback used to sign and optionally submit transactions. */
+  signTransaction?: SignTransaction;
+  /** Optional SEP-43 authorization signer for multi-auth invocations. */
+  signAuthEntry?: ClientOptions["signAuthEntry"];
 }
 
 export interface SubmitResult {
@@ -66,16 +69,8 @@ export class SASClient {
 
   constructor(private readonly config: SASClientConfig) {}
 
-  private signer() {
-    if (!this.config.secret) return undefined;
-    return basicNodeSigner(
-      Keypair.fromSecret(this.config.secret),
-      this.config.networkPassphrase,
-    );
-  }
-
   private publicKey(): string | undefined {
-    return this.config.publicKey ?? (this.config.secret ? Keypair.fromSecret(this.config.secret).publicKey() : undefined);
+    return this.config.publicKey;
   }
 
   private async sas(): Promise<ContractClient> {
@@ -85,7 +80,8 @@ export class SASClient {
         rpcUrl: this.config.rpcUrl,
         networkPassphrase: this.config.networkPassphrase,
         publicKey: this.publicKey(),
-        ...this.signer(),
+        signTransaction: this.config.signTransaction,
+        signAuthEntry: this.config.signAuthEntry,
       });
     }
     return this.sasClient;
@@ -101,7 +97,8 @@ export class SASClient {
         rpcUrl: this.config.rpcUrl,
         networkPassphrase: this.config.networkPassphrase,
         publicKey: this.publicKey(),
-        ...this.signer(),
+        signTransaction: this.config.signTransaction,
+        signAuthEntry: this.config.signAuthEntry,
       });
     }
     return this.registryClient;
@@ -117,16 +114,32 @@ export class SASClient {
         rpcUrl: this.config.rpcUrl,
         networkPassphrase: this.config.networkPassphrase,
         publicKey: this.publicKey(),
-        ...this.signer(),
       });
     }
     return this.indexerClient;
   }
 
+  /** Reads indexed UIDs for a recipient without submitting a transaction. */
+  async getRecipientAttestations(recipient: string): Promise<UID[]> {
+    const client = await this.indexer();
+    // The contract's Vec<UID> decodes to one-element arrays of 32-byte buffers.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const tx = await (client as any).get_attestations_by_recipient({ recipient });
+    if (!Array.isArray(tx.result)) {
+      throw new Error("Indexer returned malformed recipient attestation UIDs");
+    }
+    return tx.result.map((value: unknown): UID => {
+      const bytes = Array.isArray(value) && value.length === 1 ? value[0] : null;
+      if (!(bytes instanceof Uint8Array) || bytes.length !== 32) {
+        throw new Error("Indexer returned a malformed attestation UID");
+      }
+      return Buffer.from(bytes).toString("hex");
+    });
+  }
   /** Calls `SchemaRegistry::register(owner, schema, resolver, revocable)`. */
   async registerSchema(schema: string, resolver: string, revocable: boolean): Promise<UID> {
     const owner = this.publicKey();
-    if (!owner) throw new Error("registerSchema requires config.publicKey or config.secret");
+    if (!owner) throw new Error("registerSchema requires config.publicKey");
     const client = await this.registry();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tx = await (client as any).register({ owner, schema, resolver, revocable });

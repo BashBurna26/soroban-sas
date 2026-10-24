@@ -10,6 +10,7 @@ cargo_err.log
 .env.*
 !.env.example
 
+temp_auto_push.bat
 .env
 *.env.bak
 
@@ -21,3 +22,5 @@ cargo_err.log
 /coverage-report/
 cobertura.xml
 tarpaulin-report.json
+.gitignore
+branch_structure.json

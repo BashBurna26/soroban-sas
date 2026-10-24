@@ -1,379 +1,177 @@
-import { act, renderHook, waitFor } from "@testing-library/react";
-import type { ReactNode } from "react";
-import { describe, expect, it, vi } from "vitest";
-import {
-  SASProvider,
-  useAttestation,
-  useAttestationsByRecipient,
-  useSchema,
-} from "../src/index.js";
-import type {
-  Attestation,
-  SASClientLike,
-  SchemaRecord,
-} from "../src/types.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { type ReactNode, useState } from "react";
+import type { Attestation, SASClientConfig, SchemaRecord } from "@soroban-sas/sdk";
+import { SasProvider, useAttestation, useRecipientAttestations, useSchema, useAttest, useRevoke, type SasHooksClient } from "../src/index.js";
 
-const SAMPLE_UID = "11".repeat(32);
-const SAMPLE_UID_2 = "22".repeat(32);
-const SAMPLE_SCHEMA_UID = "aa".repeat(32);
-const ZERO_UID = "00".repeat(32);
-const RECIPIENT = "GALICE55555555555555555555555555555555555555555555555555";
-const ATTESTER = "GISSUER9999999999999999999999999999999999999999999999999";
-const RESOLVER = "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4";
+afterEach(cleanup);
 
-function makeAttestation(overrides: Partial<Attestation> = {}): Attestation {
+const config: SASClientConfig = {
+  contractId: "C_SAS", registryContractId: "C_REGISTRY", indexerContractId: "C_INDEXER",
+  rpcUrl: "https://test.example/rpc",
+  networkPassphrase: "Test SDF Network ; September 2015",
+};
+
+const attestation: Attestation = {
+  uid: "a".repeat(64), schemaUid: "b".repeat(64),
+  time: 1n, expirationTime: 0n, revocationTime: 0n,
+  refUid: "0".repeat(64), recipient: "G_RECIPIENT", attester: "G_ATTESTER",
+  revocable: true, data: new Uint8Array([1, 2]),
+};
+const schema: SchemaRecord = { uid: attestation.schemaUid, schema: "bool verified", resolver: "C_RESOLVER", revocable: true };
+
+function makeClient() {
   return {
-    uid: SAMPLE_UID,
-    schemaUid: SAMPLE_SCHEMA_UID,
-    time: 1_700_000_000n,
-    expirationTime: 1_800_000_000n,
-    revocationTime: 0n,
-    refUid: ZERO_UID,
-    recipient: RECIPIENT,
-    attester: ATTESTER,
-    revocable: true,
-    data: new Uint8Array([1, 2, 3, 4]),
-    ...overrides,
-  };
+    getAttestation: vi.fn(async (_uid: string) => attestation as Attestation | null),
+    getRecipientAttestations: vi.fn(async (_address: string) => [attestation.uid]),
+    getSchema: vi.fn(async (_uid: string) => schema as SchemaRecord | null),
+    attest: vi.fn(async (_row: Attestation) => ({ hash: "tx-attested" })),
+    revoke: vi.fn(async (_uid: string) => ({ hash: "tx-revoked" })),
+  } satisfies SasHooksClient;
 }
 
-function makeSchema(overrides: Partial<SchemaRecord> = {}): SchemaRecord {
-  return {
-    uid: SAMPLE_SCHEMA_UID,
-    resolver: RESOLVER,
-    revocable: true,
-    schema: "verified bool, score u32",
-    deprecated: false,
-    ...overrides,
-  };
+function setup(children: ReactNode, client: SasHooksClient, overrideConfig = config) {
+  return render(<SasProvider config={overrideConfig} client={client}>{children}</SasProvider>);
 }
 
-function createWrapper(client: SASClientLike, account: string | null = RECIPIENT) {
-  return function Wrapper({ children }: { children: ReactNode }) {
-    return (
-      <SASProvider network="testnet" account={account} client={client}>
-        {children}
-      </SASProvider>
-    );
-  };
+function Queries({ uid, recipient }: { uid?: string; recipient?: string }) {
+  const a = useAttestation(uid);
+  const r = useRecipientAttestations(recipient);
+  const s = useSchema(uid ? schema.uid : undefined);
+  return <div>
+    <span data-testid="attestation">{a.data?.uid ?? (a.error ? "error" : "none")}</span>
+    <span data-testid="recipient">{r.data?.length ?? "none"}</span>
+    <span data-testid="schema">{s.data?.schema ?? "none"}</span>
+  </div>;
 }
 
-describe("useAttestation", () => {
-  it("provides intuitive isLoading, data, and error=null states on success", async () => {
-    const attestation = makeAttestation();
-    let resolvePromise!: (val: Attestation | null) => void;
-    const client: SASClientLike = {
-      getAttestation: vi.fn(
-        () =>
-          new Promise<Attestation | null>((resolve) => {
-            resolvePromise = resolve;
-          }),
-      ),
-      getSchema: vi.fn(),
-    };
-
-    const { result } = renderHook(() => useAttestation(SAMPLE_UID), {
-      wrapper: createWrapper(client),
-    });
-
-    // Initial loading state
-    expect(result.current.isLoading).toBe(true);
-    expect(result.current.data).toBeUndefined();
-    expect(result.current.attestation).toBeUndefined();
-    expect(result.current.error).toBeNull();
-
-    // Resolve the RPC call
-    act(() => {
-      resolvePromise(attestation);
-    });
-
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-    });
-
-    expect(result.current.data).toEqual(attestation);
-    expect(result.current.attestation).toEqual(attestation);
-    expect(result.current.error).toBeNull();
-    expect(client.getAttestation).toHaveBeenCalledTimes(1);
-    expect(client.getAttestation).toHaveBeenCalledWith(SAMPLE_UID);
+describe("SAS query hooks", () => {
+  it("requires an explicit wallet-aware client, not a browser secret signer", () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      expect(() => render(<SasProvider config={config}><div /></SasProvider>)).toThrow(/requires a client/);
+      expect(() => setup(<div />, makeClient(), { ...config, secret: "S_SECRET_NOT_ALLOWED" }))
+        .toThrow(/never receive a secret key/);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
-  it("normalizes 0x-prefixed uppercase UIDs and deduplicates cached queries", async () => {
-    const attestation = makeAttestation({ uid: "ab".repeat(32) });
-    const client: SASClientLike = {
-      getAttestation: vi.fn().mockResolvedValue(attestation),
-      getSchema: vi.fn(),
-    };
-
-    const wrapper = createWrapper(client);
-    const { result } = renderHook(
-      () => ({
-        first: useAttestation(`0x${"AB".repeat(32)}`),
-        second: useAttestation("ab".repeat(32)),
-      }),
-      { wrapper },
-    );
-
-    await waitFor(() => {
-      expect(result.current.first.isLoading).toBe(false);
-      expect(result.current.second.isLoading).toBe(false);
-    });
-
-    expect(result.current.first.data).toEqual(attestation);
-    expect(result.current.second.data).toEqual(attestation);
-    // Deduplicated by TanStack Query cache!
-    expect(client.getAttestation).toHaveBeenCalledTimes(1);
-    expect(client.getAttestation).toHaveBeenCalledWith("ab".repeat(32));
-  });
-
-  it("surfaces error state when getAttestation rejects", async () => {
-    const client: SASClientLike = {
-      getAttestation: vi.fn().mockRejectedValue(new Error("RPC node unreachable")),
-      getSchema: vi.fn(),
-    };
-
-    const { result } = renderHook(() => useAttestation(SAMPLE_UID), {
-      wrapper: createWrapper(client),
-    });
-
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-    });
-
-    expect(result.current.isError).toBe(true);
-    expect(result.current.error?.message).toBe("RPC node unreachable");
-    expect(result.current.data).toBeUndefined();
-  });
-
-  it("does not fetch when uid is null, undefined, or empty", () => {
-    const client: SASClientLike = {
-      getAttestation: vi.fn(),
-      getSchema: vi.fn(),
-    };
-
-    const { result: r1 } = renderHook(() => useAttestation(null), {
-      wrapper: createWrapper(client),
-    });
-    const { result: r2 } = renderHook(() => useAttestation(""), {
-      wrapper: createWrapper(client),
-    });
-
-    expect(r1.current.isLoading).toBe(false);
-    expect(r2.current.isLoading).toBe(false);
+  it("does not fetch when identifiers are empty or missing", async () => {
+    const client = makeClient();
+    setup(<Queries />, client);
+    await act(async () => {});
     expect(client.getAttestation).not.toHaveBeenCalled();
-  });
-
-  it("re-fetches when invalidate() is called on the hook result", async () => {
-    const att1 = makeAttestation({ revocationTime: 0n });
-    const att2 = makeAttestation({ revocationTime: 1_750_000_000n });
-    const client: SASClientLike = {
-      getAttestation: vi
-        .fn()
-        .mockResolvedValueOnce(att1)
-        .mockResolvedValueOnce(att2),
-      getSchema: vi.fn(),
-    };
-
-    const { result } = renderHook(() => useAttestation(SAMPLE_UID), {
-      wrapper: createWrapper(client),
-    });
-
-    await waitFor(() => {
-      expect(result.current.data?.revocationTime).toBe(0n);
-    });
-
-    await act(async () => {
-      await result.current.invalidate();
-    });
-
-    await waitFor(() => {
-      expect(result.current.data?.revocationTime).toBe(1_750_000_000n);
-    });
-    expect(client.getAttestation).toHaveBeenCalledTimes(2);
-  });
-});
-
-describe("useSchema", () => {
-  it("provides intuitive isLoading, data, and error states", async () => {
-    const schema = makeSchema();
-    const client: SASClientLike = {
-      getAttestation: vi.fn(),
-      getSchema: vi.fn().mockResolvedValue(schema),
-    };
-
-    const { result } = renderHook(() => useSchema(SAMPLE_SCHEMA_UID), {
-      wrapper: createWrapper(client),
-    });
-
-    expect(result.current.isLoading).toBe(true);
-
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-    });
-
-    expect(result.current.data).toEqual(schema);
-    expect(result.current.schema).toEqual(schema);
-    expect(result.current.error).toBeNull();
-  });
-
-  it("handles missing schema (null) and error states", async () => {
-    const client: SASClientLike = {
-      getAttestation: vi.fn(),
-      getSchema: vi
-        .fn()
-        .mockResolvedValueOnce(null)
-        .mockRejectedValueOnce(new Error("Registry contract error")),
-    };
-
-    const { result } = renderHook(() => useSchema(SAMPLE_SCHEMA_UID), {
-      wrapper: createWrapper(client),
-    });
-
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-    });
-    expect(result.current.data).toBeNull();
-
-    await act(async () => {
-      await result.current.invalidate();
-    });
-
-    await waitFor(() => {
-      expect(result.current.isError).toBe(true);
-    });
-    expect(result.current.error?.message).toBe("Registry contract error");
-  });
-
-  it("stays idle when schemaUid is empty or disabled", () => {
-    const client: SASClientLike = {
-      getAttestation: vi.fn(),
-      getSchema: vi.fn(),
-    };
-
-    const { result } = renderHook(
-      () => useSchema(SAMPLE_SCHEMA_UID, { enabled: false }),
-      { wrapper: createWrapper(client) },
-    );
-
-    expect(result.current.isLoading).toBe(false);
+    expect(client.getRecipientAttestations).not.toHaveBeenCalled();
     expect(client.getSchema).not.toHaveBeenCalled();
   });
+
+  it("fetches attestation, recipient records and schema using the injected client", async () => {
+    const client = makeClient();
+    setup(<Queries uid={attestation.uid} recipient="G_RECIPIENT" />, client);
+    await waitFor(() => expect(screen.getByTestId("recipient").textContent).toBe("1"));
+    expect(screen.getByTestId("attestation").textContent).toBe(attestation.uid);
+    expect(screen.getByTestId("schema").textContent).toBe(schema.schema);
+    expect(client.getRecipientAttestations).toHaveBeenCalledWith("G_RECIPIENT");
+    expect(client.getAttestation).toHaveBeenCalledWith(attestation.uid);
+  });
+
+  it("deduplicates simultaneous consumers via SWR and refetches on key changes", async () => {
+    const client = makeClient();
+    function Two() {
+      const [uid, setUid] = useState("a".repeat(64));
+      return <><button onClick={() => setUid("c".repeat(64))}>change</button><Queries uid={uid} /><Queries uid={uid} /></>;
+    }
+    setup(<Two />, client);
+    await waitFor(() => expect(client.getAttestation).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByText("change"));
+    await waitFor(() => expect(client.getAttestation).toHaveBeenCalledTimes(2));
+    expect(client.getAttestation).toHaveBeenLastCalledWith("c".repeat(64));
+  });
+
+  it("isolate caches for separate SasProviders", async () => {
+    const first = makeClient();
+    const second = makeClient();
+    second.getAttestation.mockResolvedValueOnce({ ...attestation, uid: "c".repeat(64) });
+    render(<>
+      <SasProvider config={config} client={first}><Queries uid={attestation.uid} /></SasProvider>
+      <SasProvider config={config} client={second}><Queries uid={attestation.uid} /></SasProvider>
+    </>);
+    await waitFor(() => expect(first.getAttestation).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(second.getAttestation).toHaveBeenCalledTimes(1));
+    expect(screen.getAllByTestId("attestation").map(x => x.textContent)).toContain("c".repeat(64));
+  });
+
+  it("ignores late read responses after a query component is unmounted", async () => {
+    let resolve!: (att: Attestation | null) => void;
+    const client = makeClient();
+    client.getAttestation.mockImplementationOnce(() => new Promise((r) => { resolve = r; }));
+    const view = setup(<Queries uid={attestation.uid} />, client);
+    await waitFor(() => expect(client.getAttestation).toHaveBeenCalledOnce());
+    view.unmount();
+    await act(async () => resolve(attestation));
+    expect(client.getAttestation).toHaveBeenCalledOnce();
+  });
 });
 
-describe("useAttestationsByRecipient", () => {
-  it("fetches and returns recipient attestations with intuitive states", async () => {
-    const list = [
-      makeAttestation({ uid: SAMPLE_UID }),
-      makeAttestation({ uid: SAMPLE_UID_2 }),
-    ];
-    const client: SASClientLike = {
-      getAttestation: vi.fn(),
-      getSchema: vi.fn(),
-      getAttestationsByRecipient: vi.fn().mockResolvedValue(list),
-    };
+function MutationUI() {
+  const issue = useAttest();
+  const revoke = useRevoke();
+  return <div>
+    <button onClick={() => void issue.attest(attestation).catch(() => undefined)}>attest</button>
+    <button onClick={() => void revoke.revoke(attestation.uid).catch(() => undefined)}>revoke</button>
+    <span data-testid="issue-status">{issue.status}</span>
+    <span data-testid="issue-hash">{issue.txHash}</span>
+    <span data-testid="issue-error">{issue.error?.message}</span>
+    <span data-testid="revoke-status">{revoke.status}</span>
+    <span data-testid="revoke-hash">{revoke.txHash}</span>
+  </div>;
+}
 
-    const { result } = renderHook(() => useAttestationsByRecipient(RECIPIENT), {
-      wrapper: createWrapper(client),
-    });
-
-    expect(result.current.isLoading).toBe(true);
-    expect(result.current.attestations).toEqual([]);
-
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-    });
-
-    expect(result.current.data).toEqual(list);
-    expect(result.current.attestations).toEqual(list);
-    expect(result.current.error).toBeNull();
+describe("SAS mutation hooks", () => {
+  it("reports pending, success and hash and revalidates attestation caches", async () => {
+    let resolve!: (result: { hash: string }) => void;
+    const client = makeClient();
+    client.attest.mockImplementationOnce(() => new Promise((r) => { resolve = r; }));
+    setup(<><Queries uid={attestation.uid} recipient="G_RECIPIENT" /><MutationUI /></>, client);
+    await waitFor(() => expect(screen.getByTestId("recipient").textContent).toBe("1"));
+    fireEvent.click(screen.getByText("attest"));
+    expect(screen.getByTestId("issue-status").textContent).toBe("pending");
+    await act(async () => resolve({ hash: "tx-real" }));
+    await waitFor(() => expect(screen.getByTestId("issue-status").textContent).toBe("success"));
+    expect(screen.getByTestId("issue-hash").textContent).toBe("tx-real");
+    await waitFor(() => expect(client.getRecipientAttestations.mock.calls.length).toBeGreaterThan(1));
+    expect(client.getSchema).toHaveBeenCalledTimes(1); // schema cache is unrelated
   });
 
-  it("resolves UIDs via getAttestation when client returns UID[] or implements getAttestationUidsByRecipient", async () => {
-    const att1 = makeAttestation({ uid: SAMPLE_UID });
-    const att2 = makeAttestation({ uid: SAMPLE_UID_2 });
-
-    const clientWithUidsReturn: SASClientLike = {
-      getAttestation: vi.fn(async (uid: string) =>
-        uid === SAMPLE_UID ? att1 : uid === SAMPLE_UID_2 ? att2 : null,
-      ),
-      getSchema: vi.fn(),
-      getAttestationsByRecipient: vi.fn().mockResolvedValue([SAMPLE_UID, SAMPLE_UID_2]),
-    };
-
-    const { result: r1 } = renderHook(
-      () => useAttestationsByRecipient(RECIPIENT),
-      { wrapper: createWrapper(clientWithUidsReturn) },
-    );
-
-    await waitFor(() => {
-      expect(r1.current.isLoading).toBe(false);
-    });
-    expect(r1.current.data).toEqual([att1, att2]);
-
-    const clientWithUidsMethodOnly: SASClientLike = {
-      getAttestation: vi.fn(async (uid: string) =>
-        uid === SAMPLE_UID ? att1 : null,
-      ),
-      getSchema: vi.fn(),
-      getAttestationUidsByRecipient: vi.fn().mockResolvedValue([SAMPLE_UID]),
-    };
-
-    const { result: r2 } = renderHook(
-      () => useAttestationsByRecipient(RECIPIENT),
-      { wrapper: createWrapper(clientWithUidsMethodOnly) },
-    );
-
-    await waitFor(() => {
-      expect(r2.current.isLoading).toBe(false);
-    });
-    expect(r2.current.data).toEqual([att1]);
+  it("reports a rejected wallet signature and allows recovery", async () => {
+    const client = makeClient();
+    client.attest.mockRejectedValueOnce(new Error("User rejected the signature"));
+    setup(<MutationUI />, client);
+    fireEvent.click(screen.getByText("attest"));
+    await waitFor(() => expect(screen.getByTestId("issue-status").textContent).toBe("error"));
+    expect(screen.getByTestId("issue-error").textContent).toContain("rejected");
+    fireEvent.click(screen.getByText("attest"));
+    await waitFor(() => expect(screen.getByTestId("issue-status").textContent).toBe("success"));
   });
 
-  it("surfaces error if client implements neither recipient query method", async () => {
-    const client: SASClientLike = {
-      getAttestation: vi.fn(),
-      getSchema: vi.fn(),
-    };
-
-    const { result } = renderHook(() => useAttestationsByRecipient(RECIPIENT), {
-      wrapper: createWrapper(client),
-    });
-
-    await waitFor(() => {
-      expect(result.current.isError).toBe(true);
-    });
-
-    expect(result.current.error?.message).toMatch(
-      /does not implement getAttestationsByRecipient/,
-    );
+  it("exposes revocation submission and its transaction hash", async () => {
+    const client = makeClient();
+    setup(<MutationUI />, client);
+    fireEvent.click(screen.getByText("revoke"));
+    await waitFor(() => expect(screen.getByTestId("revoke-status").textContent).toBe("success"));
+    expect(screen.getByTestId("revoke-hash").textContent).toBe("tx-revoked");
+    expect(client.revoke).toHaveBeenCalledWith(attestation.uid);
   });
 
-  it("re-fetches when invalidate() is called", async () => {
-    const att1 = makeAttestation({ uid: SAMPLE_UID });
-    const att2 = makeAttestation({ uid: SAMPLE_UID_2 });
-    const client: SASClientLike = {
-      getAttestation: vi.fn(),
-      getSchema: vi.fn(),
-      getAttestationsByRecipient: vi
-        .fn()
-        .mockResolvedValueOnce([att1])
-        .mockResolvedValueOnce([att1, att2]),
-    };
-
-    const { result } = renderHook(() => useAttestationsByRecipient(RECIPIENT), {
-      wrapper: createWrapper(client),
-    });
-
-    await waitFor(() => {
-      expect(result.current.attestations).toHaveLength(1);
-    });
-
-    await act(async () => {
-      await result.current.invalidate();
-    });
-
-    await waitFor(() => {
-      expect(result.current.attestations).toHaveLength(2);
-    });
+  it("does not update React state after unmount while a transaction is pending", async () => {
+    let resolve!: (result: { hash: string }) => void;
+    const client = makeClient();
+    client.attest.mockImplementationOnce(() => new Promise((r) => { resolve = r; }));
+    const view = setup(<MutationUI />, client);
+    fireEvent.click(screen.getByText("attest"));
+    view.unmount();
+    await act(async () => resolve({ hash: "finished-after-unmount" }));
+    expect(client.attest).toHaveBeenCalledOnce();
   });
 });

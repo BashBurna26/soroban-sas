@@ -1,145 +1,117 @@
 # @soroban-sas/react
 
-React hooks and TanStack Query integration for the Soroban Attestation Service (SAS).
-
-`@soroban-sas/react` eliminates repetitive frontend boilerplate for state management, loading states, error handling, account/network switching, window focus revalidation, and event-driven cache invalidation when building web3 dApps on Soroban SAS.
-
-## Features
-
-- **`SASProvider` context**: Configures the active Soroban network (`local`, `testnet`, `futurenet`, `mainnet`, or custom), RPC client, contract addresses, and TanStack Query client.
-- **Core data hooks**:
-  - `useAttestation(uid, options?)` — fetches and caches an `Attestation` record by its 32-byte UID.
-  - `useSchema(schemaUid, options?)` — fetches and caches a `SchemaRecord` from the Schema Registry by its 32-byte UID.
-  - `useAttestationsByRecipient(address, options?)` — queries the Indexer contract for a recipient's attestations and resolves their full records.
-- **TanStack Query integration**: Automatic request deduplication, caching, and background revalidation.
-- **Automatic re-fetching**:
-  - Revalidates active queries automatically when the active wallet account switches (`account` prop, `switchAccount()`, or `sas:account-changed` / `stellar:accountChanged` / `freighter:accountChanged` window events).
-  - Revalidates active queries automatically when the browser window regains focus (`focus` and `visibilitychange` events).
-- **Event-based triggers (`useSASEvents`)**: Subscribes to SAS contract events (`AttestationIssued`, `AttestationRevoked`, `SchemaRegistered`, `BatchAttested`, `BatchRevoked`) via provider emission, DOM `CustomEvent`s, or Soroban RPC `getEvents` polling, and automatically invalidates affected query caches.
-- **Sample Demo App & Storybook Stories**: Includes an interactive Vite demo app (`src/demo/SASDemoApp.tsx`) and Storybook stories (`src/stories/SAS.stories.tsx`).
+React query and mutation hooks for Soroban SAS attestation applications.
 
 ## Install
 
-```bash
-npm install @soroban-sas/react @tanstack/react-query react react-dom
+```sh
+npm install @soroban-sas/sdk @soroban-sas/react react swr
 ```
 
-## Quick Start
+The package requires React 18/19 and an installed `@soroban-sas/sdk`.
+SWR v2 automatically deduplicates in-flight requests, caches responses,
+revalidates on focus and discards results after components unmount.
 
-### 1. Wrap your application in `SASProvider`
+## Provider
 
 ```tsx
-import { SASProvider } from "@soroban-sas/react";
+"use client";
+import { SasProvider } from "@soroban-sas/react";
+import { createDemoClient } from "./demo-client";
+// Copy demo-client.ts from examples/react-hooks-nextjs/app for this sample.
+// In production replace createDemoClient with your wallet-aware client factory.
 
-export function App() {
-  return (
-    <SASProvider
-      network="testnet"
-      contractId="C..."
-      registryContractId="C..."
-      indexerContractId="C..."
-      account={connectedWalletAddress}
-    >
-      <ProfileAttestations />
-    </SASProvider>
-  );
+const config = {
+  contractId: process.env.NEXT_PUBLIC_SAS_CONTRACT_ID!,
+  registryContractId: process.env.NEXT_PUBLIC_REGISTRY_CONTRACT_ID!,
+  indexerContractId: process.env.NEXT_PUBLIC_INDEXER_CONTRACT_ID!,
+  rpcUrl: "https://soroban-testnet.stellar.org",
+  networkPassphrase: "Test SDF Network ; September 2015",
+};
+
+export function Providers({ children }: { children: React.ReactNode }) {
+  return <SasProvider config={config} createClient={createDemoClient}>{children}</SasProvider>;
 }
 ```
 
-### 2. Query attestations and schemas with hooks
+The provider requires an injected `client={walletAwareClient}` or
+`createClient={(config) => new MyWalletClient(config)}`.
+For a working mock-based example, see the referenced Next.js demo.
+No default Node signer is instantiated inside browser bundles. The injected client must implement
+`getAttestation`, `getSchema`, `getRecipientAttestations`, `attest`,
+and `revoke`. **Never pass a secret key into a browser/Next.js client.**
+The default SDK's Node keypair signer is not a browser wallet; for live
+mutations inject a client wired to the user's wallet.
+
+## Query hooks
 
 ```tsx
-import {
-  useAttestation,
-  useSchema,
-  useAttestationsByRecipient,
-  useSAS,
-} from "@soroban-sas/react";
-
-export function ProfileAttestations() {
-  const { account, switchAccount } = useSAS();
-  const {
-    data: attestations,
-    isLoading,
-    error,
-  } = useAttestationsByRecipient(account);
-
-  if (isLoading) return <p>Loading attestations...</p>;
-  if (error) return <p>Error: {error.message}</p>;
-
-  return (
-    <div>
-      {attestations?.map((att) => (
-        <AttestationCard key={att.uid} uid={att.uid} schemaUid={att.schemaUid} />
-      ))}
-    </div>
-  );
-}
-
-function AttestationCard({ uid, schemaUid }: { uid: string; schemaUid: string }) {
-  const { data: attestation, isLoading: loadingAtt } = useAttestation(uid);
-  const { data: schema, isLoading: loadingSchema } = useSchema(schemaUid);
-
-  if (loadingAtt || loadingSchema) return <div>Loading claim...</div>;
-
-  return (
-    <article>
-      <h3>Schema: {schema?.schema}</h3>
-      <p>Attester: {attestation?.attester}</p>
-      <p>Status: {attestation && attestation.revocationTime > 0n ? "Revoked" : "Active"}</p>
-    </article>
-  );
-}
+const { data, error, isLoading, mutate } = useAttestation(uid);
+const { data: recipientRows } = useRecipientAttestations(account);
+const { data: schema } = useSchema(schemaUid);
 ```
 
-### 3. Event-based triggers
+- Null or empty identifiers disable the query.
+- `useRecipientAttestations` gets UIDs from the configured Indexer
+  contract and resolves their full attestation records from the SAS contract.
+- All query keys are scoped to the provider and network configuration.
+- A successful mutation revalidates the attestation and recipient caches;
+  a failed refetch never changes a successfully submitted transaction into an error.
+
+## Mutations
 
 ```tsx
-import { useSASEvents, dispatchSASEvent } from "@soroban-sas/react";
+const { attest, status, isLoading, error, txHash, reset } = useAttest();
+const revocation = useRevoke();
 
-export function AttestationActivityFeed() {
-  const { lastEvent, events, emitEvent } = useSASEvents({
-    onAttestationIssued: (ev) => {
-      console.log("New attestation issued:", ev.uid);
-    },
-    onAttestationRevoked: (ev) => {
-      console.log("Attestation revoked:", ev.uid);
-    },
-  });
-
-  return (
-    <div>
-      <p>Total events received: {events.length}</p>
-      {lastEvent && <p>Latest: {lastEvent.type}</p>}
-    </div>
-  );
-}
+await attest(attestation);   // a complete Attestation matching the on-chain schema
+await revocation.revoke(attestation.uid);
 ```
 
-## Sample Demo App
+`status` transitions `idle -> pending -> success` or `idle -> pending -> error`.
+`txHash` is provided by the injected client's confirmed submission result.
+Errors (including wallet rejection) are retained and rethrown for the caller to handle.
+Unmounts and overlapping mutations do not update stale React state.
 
-Run the interactive demo application locally with Vite:
+## Next.js example
 
-```bash
-cd packages/soroban-sas-react
-npm ci
-npm run dev
+See [examples/react-hooks-nextjs](../../examples/react-hooks-nextjs)
+for a React client-page example showing query and mutation hooks. Fill in
+testnet contract IDs and provide a wallet-aware implementation for signing.
+
+## Local development
+
+```sh
+cd packages/soroban-sas-js && npm ci && npm run build
+cd ../soroban-sas-react && npm ci && npm run typecheck && npm test && npm run build
 ```
 
-Or build the library and demo app:
+SDK contract-call argument shapes require testnet integration verification
+before a real transaction is broadcast. The unit tests exercise deterministic
+mock clients, cache revalidation, mutation states and unmount handling.
 
-```bash
-npm run build
-npm run build:demo
-```
+## Testnet and wallet signing verification
 
-## Testing
+The SDK accepts SEP-43 `signTransaction` and `signAuthEntry` callbacks in
+`SASClientConfig`, allowing Freighter-style wallet signing without Node secret keys.
+The Next.js example includes `app/freighter-wallet.ts` and an opt-in diagnostic
+page at `/wallet`. The page connects to Freighter on Testnet, then verifies a
+signed transaction envelope cryptographically **without submitting it**.
 
-Run the unit test suite (Vitest + React Testing Library):
+For an independent end-to-end smoke test with a throwaway account, run
+`cd packages/soroban-sas-js && npm run test:testnet`. It explicitly requests
+Friendbot funds, submits a harmless manageData transaction to Stellar Testnet,
+and checks ledger inclusion through raw JSON-RPC. This network operation is
+opt-in and deliberately excluded from unit tests.
 
-```bash
-cd packages/soroban-sas-react
-npm test
-npm run test:coverage
-npm run typecheck
-```
+Full SAS Registry/Indexer integration requires genuine deployed contract IDs.
+Real Freighter approval requires the wallet owner to interact with the extension.
+Do not confuse a successful throwaway-account transaction with a successful SAS
+contract invocation or with extension approval.
+
+## Alternative: TanStack Query & Event-Driven Hooks
+
+`@soroban-sas/react` also includes components and hooks for TanStack Query and event-driven caching:
+- `SASProvider` (`src/context.tsx`)
+- `useSASEvents` (`src/events.ts`, `src/hooks/useSASEvents.ts`)
+- Interactive Vite demo application (`src/demo/SASDemoApp.tsx`)

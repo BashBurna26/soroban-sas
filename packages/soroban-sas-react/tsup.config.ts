@@ -7,5 +7,5 @@ export default defineConfig({
   sourcemap: true,
   clean: true,
   target: "es2022",
-  external: ["react", "react-dom"],
+  external: ["react", "react/jsx-runtime", "react-dom", "swr", "@soroban-sas/sdk", "@tanstack/react-query"],
 });
