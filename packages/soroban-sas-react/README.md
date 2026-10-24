@@ -90,7 +90,6 @@ SDK contract-call argument shapes require testnet integration verification
 before a real transaction is broadcast. The unit tests exercise deterministic
 mock clients, cache revalidation, mutation states and unmount handling.
 
-
 ## Testnet and wallet signing verification
 
 The SDK accepts SEP-43 `signTransaction` and `signAuthEntry` callbacks in
@@ -109,3 +108,10 @@ Full SAS Registry/Indexer integration requires genuine deployed contract IDs.
 Real Freighter approval requires the wallet owner to interact with the extension.
 Do not confuse a successful throwaway-account transaction with a successful SAS
 contract invocation or with extension approval.
+
+## Alternative: TanStack Query & Event-Driven Hooks
+
+`@soroban-sas/react` also includes components and hooks for TanStack Query and event-driven caching:
+- `SASProvider` (`src/context.tsx`)
+- `useSASEvents` (`src/events.ts`, `src/hooks/useSASEvents.ts`)
+- Interactive Vite demo application (`src/demo/SASDemoApp.tsx`)

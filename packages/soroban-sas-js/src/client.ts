@@ -26,7 +26,7 @@ export interface SASClientConfig {
   contractId: string;
   /** Schema Registry contract id (C...); required for schema methods. */
   registryContractId?: string;
-  /** Indexer contract id (C...); required for recipient attestation queries. */
+  /** Indexer contract id (C...); required for recipient/schema/attester index lookups. */
   indexerContractId?: string;
   rpcUrl: string;
   networkPassphrase: string;
@@ -106,7 +106,7 @@ export class SASClient {
 
   private async indexer(): Promise<ContractClient> {
     if (!this.config.indexerContractId) {
-      throw new Error("SASClientConfig.indexerContractId is required for recipient queries");
+      throw new Error("SASClientConfig.indexerContractId is required for indexer methods");
     }
     if (!this.indexerClient) {
       this.indexerClient = await ContractClient.from({
@@ -136,7 +136,6 @@ export class SASClient {
       return Buffer.from(bytes).toString("hex");
     });
   }
-
   /** Calls `SchemaRegistry::register(owner, schema, resolver, revocable)`. */
   async registerSchema(schema: string, resolver: string, revocable: boolean): Promise<UID> {
     const owner = this.publicKey();
@@ -229,5 +228,22 @@ export class SASClient {
       revocable: raw.revocable,
       data: new Uint8Array(raw.data),
     };
+  }
+
+  /** Calls `Indexer::get_attestations_by_recipient(recipient)`. Read-only (simulated). */
+  async getAttestationUidsByRecipient(recipient: string): Promise<UID[]> {
+    const client = await this.indexer();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const tx = await (client as any).get_attestations_by_recipient({ recipient });
+    const raw = (tx.result as unknown as Array<[Buffer]>) ?? [];
+    return raw.map((item) => Buffer.from(item[0]).toString("hex"));
+  }
+
+  /** Fetches all `Attestation` records indexed under `recipient`. */
+  async getAttestationsByRecipient(recipient: string): Promise<Attestation[]> {
+    const uids = await this.getAttestationUidsByRecipient(recipient);
+    if (uids.length === 0) return [];
+    const records = await Promise.all(uids.map((uid) => this.getAttestation(uid)));
+    return records.filter((item): item is Attestation => item !== null);
   }
 }
