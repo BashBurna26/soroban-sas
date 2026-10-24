@@ -632,6 +632,19 @@ fn test_merkle_root_generation() {
     assert_eq!(merkle_root.0, root_bytes);
 }
 
+// --- #448 revocation policy -------------------------------------------------
+
+#[test]
+fn test_revocation_policy_from_bool() {
+    use crate::RevocationPolicy;
+    // Legacy boolean schemas map cleanly onto the policy model.
+    assert_eq!(RevocationPolicy::from(true), RevocationPolicy::Permissive);
+    assert_eq!(
+        RevocationPolicy::from(false),
+        RevocationPolicy::IrrevocableOnly
+    );
+}
+
 #[test]
 fn test_delegation_nonce_key_xdr_smaller_than_tuple() {
     use soroban_sdk::xdr::ToXdr;
@@ -652,6 +665,158 @@ fn test_delegation_nonce_key_xdr_smaller_than_tuple() {
         typed_xdr.len(),
         tuple_xdr.len()
     );
+}
+
+#[test]
+fn test_check_policy_truth_table() {
+    use crate::validation::check_policy;
+    use crate::RevocationPolicy;
+
+    // RevocableOnly: revocable attestation OK, irrevocable rejected.
+    assert!(check_policy(RevocationPolicy::RevocableOnly, true).is_ok());
+    assert_eq!(
+        check_policy(RevocationPolicy::RevocableOnly, false),
+        Err(crate::errors::SASError::InvalidRevocability)
+    );
+
+    // IrrevocableOnly: irrevocable OK, revocable rejected.
+    assert!(check_policy(RevocationPolicy::IrrevocableOnly, false).is_ok());
+    assert_eq!(
+        check_policy(RevocationPolicy::IrrevocableOnly, true),
+        Err(crate::errors::SASError::NotRevocable)
+    );
+
+    // Permissive: either flag allowed.
+    assert!(check_policy(RevocationPolicy::Permissive, true).is_ok());
+    assert!(check_policy(RevocationPolicy::Permissive, false).is_ok());
+}
+
+// --- #447 strict schema lexical validation ----------------------------------
+
+#[test]
+fn test_validate_schema_lexical_accepts_canonical_schemas() {
+    use crate::validation::validate_schema_lexical;
+    let env = Env::default();
+    for schema in [
+        "bool like_soroban",
+        "first_name String, last_name String",
+        "uint256 amount,address to",
+    ] {
+        let schema = SorobanString::from_str(&env, schema);
+        assert!(
+            validate_schema_lexical(&env, &schema).is_ok(),
+            "canonical schema should pass lexical validation: {schema:?}"
+        );
+    }
+}
+
+#[test]
+fn test_validate_schema_lexical_rejects_control_and_invisible_chars() {
+    use crate::validation::validate_schema_lexical;
+    let env = Env::default();
+
+    // Tab, newline, carriage return, null byte, vertical tab.
+    for raw in [
+        "bool\tlike",
+        "bool\nlike",
+        "bool\rlike",
+        "bool\u{0}like",
+        "bool\u{000b}like",
+        // Non-ASCII / invisible unicode whitespace and formatting.
+        "bool\u{00a0}like", // non-breaking space
+        "bool\u{200b}like", // zero-width space
+        "bool\u{feff}like", // BOM / zero-width no-break space
+        "bool\u{3000}like", // ideographic space
+        "bool\u{2028}like", // line separator
+        "bool\u{00ad}like", // soft hyphen
+    ] {
+        let schema = SorobanString::from_str(&env, raw);
+        assert_eq!(
+            validate_schema_lexical(&env, &schema),
+            Err(crate::errors::SASError::InvalidSchemaDefinition),
+            "expected lexical rejection for {raw:?}"
+        );
+    }
+}
+
+#[test]
+fn test_validate_schema_lexical_rejects_malformed_separators() {
+    use crate::validation::validate_schema_lexical;
+    let env = Env::default();
+
+    for raw in [
+        "bool like,",      // trailing delimiter
+        ",bool like",      // leading delimiter
+        "bool like,,x y",  // empty field between commas
+        "bool  like",      // double space (non-canonical)
+        "bool like ,x y",  // space before comma
+        "bool like,  x y", // multiple spaces after comma
+    ] {
+        let schema = SorobanString::from_str(&env, raw);
+        assert_eq!(
+            validate_schema_lexical(&env, &schema),
+            Err(crate::errors::SASError::InvalidSchemaDefinition),
+            "expected malformed-separator rejection for {raw:?}"
+        );
+    }
+
+    // A canonical single space after a comma is allowed.
+    let ok = SorobanString::from_str(&env, "bool like, uint256 amount");
+    assert!(validate_schema_lexical(&env, &ok).is_ok());
+}
+
+/// Lightweight adversarial fuzz: scan a range of byte values spliced into an
+/// otherwise-valid schema. Every control byte (and DEL) must be rejected as
+/// `InvalidSchemaDefinition`; printable ASCII must never trip the control
+/// check (it may still fail later syntax validation, which is a separate
+/// layer).
+#[test]
+fn test_validate_schema_lexical_fuzz_byte_injection() {
+    use crate::validation::validate_schema_lexical;
+    extern crate alloc;
+    use alloc::string::String as StdString;
+    let env = Env::default();
+
+    for byte in 0u8..=127 {
+        let c = byte as char;
+        let mut raw = StdString::new();
+        raw.push_str("bool ");
+        raw.push(c);
+        raw.push_str("field");
+        let schema = SorobanString::from_str(&env, &raw);
+        let result = validate_schema_lexical(&env, &schema);
+        if byte < 0x20 || byte == 0x7f {
+            assert_eq!(
+                result,
+                Err(crate::errors::SASError::InvalidSchemaDefinition),
+                "control byte {byte:#x} must be rejected"
+            );
+        } else if byte != b',' && byte != b' ' {
+            // Printable ASCII (other than the separator bytes `,` and ` `,
+            // whose canonical-spacing rules are exercised separately) must
+            // pass the lexical layer cleanly.
+            assert_eq!(
+                result,
+                Ok(()),
+                "printable byte {byte:#x} must pass lexical validation"
+            );
+        }
+    }
+}
+
+#[test]
+fn recipient_consent_nonce_key_is_distinct_from_attester_nonce_key() {
+    use soroban_sdk::xdr::ToXdr;
+    let env = Env::default();
+    let address = Address::generate(&env);
+    let attester_key = crate::DelegationNonceKey {
+        attester: address.clone(),
+    };
+    let recipient_key = crate::RecipientConsentNonceKey {
+        scope: soroban_sdk::symbol_short!("RCONSENT"),
+        recipient: address,
+    };
+    assert_ne!(attester_key.to_xdr(&env), recipient_key.to_xdr(&env));
 }
 
 #[test]
@@ -807,4 +972,49 @@ fn test_compact_attestation_storage_footprint_reduction_exceeds_15_percent() {
         original_len,
         compact_len
     );
+}
+
+#[test]
+fn test_validate_frost_group_accepts_only_consistent_groups() {
+    use crate::{validate_frost_group, FrostGroup, SASError, MAX_FROST_SIGNERS};
+
+    let env = soroban_sdk::Env::default();
+    let key = soroban_sdk::BytesN::from_array(&env, &[3u8; 32]);
+
+    let valid = FrostGroup {
+        group_public_key: key.clone(),
+        threshold: 2,
+        max_signers: 3,
+    };
+    assert!(validate_frost_group(&valid).is_ok());
+
+    for (threshold, max_signers) in [(1, 3), (0, 3), (4, 3), (2, 0)] {
+        let group = FrostGroup {
+            group_public_key: key.clone(),
+            threshold,
+            max_signers,
+        };
+        assert_eq!(
+            validate_frost_group(&group),
+            Err(SASError::InvalidValue),
+            "threshold {threshold} of {max_signers} must be rejected"
+        );
+    }
+
+    let oversized = FrostGroup {
+        group_public_key: key.clone(),
+        threshold: 2,
+        max_signers: MAX_FROST_SIGNERS + 1,
+    };
+    assert_eq!(
+        validate_frost_group(&oversized),
+        Err(SASError::LimitExceeded)
+    );
+
+    let zero_key = FrostGroup {
+        group_public_key: soroban_sdk::BytesN::from_array(&env, &[0u8; 32]),
+        threshold: 2,
+        max_signers: 3,
+    };
+    assert_eq!(validate_frost_group(&zero_key), Err(SASError::InvalidValue));
 }

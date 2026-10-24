@@ -2,12 +2,12 @@ use soroban_sas_common::{
     events::{
         ADMIN_TRANSFER_COMPLETED, ADMIN_TRANSFER_PROPOSED, ATTESTATION_RENEWED, ATTESTED,
         BATCH_ATTESTED, BATCH_REVOKED, CONTRACT_PAUSED, CONTRACT_UNPAUSED, CONTRACT_UPGRADED,
-        INDEXER_STRICT_UPDATED, INDEXER_UPDATED, REVOKED,
+        INDEXER_STRICT_UPDATED, INDEXER_UPDATED, NONCES_INVALIDATED, REVOKED,
     },
     AdminTransferCompletedEvent, AdminTransferProposedEvent, Attestation, AttestationIssuedEvent,
     AttestationRenewedEvent, AttestationRevokedEvent, BatchAttestedEvent, BatchRevokedEvent,
     ContractPausedEvent, ContractUnpausedEvent, ContractUpgradedEvent, IndexerStrictUpdatedEvent,
-    IndexerUpdatedEvent, UID,
+    IndexerUpdatedEvent, NoncesInvalidatedEvent, UID,
 };
 use soroban_sdk::{symbol_short, Address, Env};
 
@@ -274,11 +274,9 @@ pub fn publish_attestation_renewed(
 /// Publishes the `NoncesInvalidated` event when an attester advances their
 /// nonce high-water mark (#437).
 ///
-/// Topics: `(NONCES_INVALIDATED, attester)`.
+/// Topics: `(NONCES_INVALIDATED, attester)`. `min_nonce`/`max_nonce` describe
+/// the inclusive range of delegation nonces cancelled by the watermark advance.
 pub fn publish_nonces_invalidated(env: &Env, attester: &Address, min_nonce: u64, max_nonce: u64) {
-    use soroban_sas_common::events::NONCES_INVALIDATED;
-    use soroban_sas_common::NoncesInvalidatedEvent;
-
     env.events().publish(
         (NONCES_INVALIDATED, attester.clone()),
         NoncesInvalidatedEvent {
