@@ -544,7 +544,7 @@ fn index_expiration_status(env: &Env, expiration_status: ExpirationStatus, uid: 
 
 /// Records a non-default lifecycle state for `uid`. Only `Revoked` /
 /// `Replaced` are ever persisted — an unindexed or freshly indexed UID has
-/// no status entry, which [`is_active`] and [`Indexer::get_attestation_status`]
+/// no status entry, which `is_active` and [`Indexer::get_attestation_status`]
 /// both read as active. Invoked by the SAS `handle_revoke` / `handle_replace`
 /// callbacks (added separately).
 pub fn set_index_status(env: &Env, uid: &UID, status: IndexStatus) {

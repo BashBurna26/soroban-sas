@@ -1348,7 +1348,7 @@ impl SchemaRegistry {
 
     /// Removes a schema's FROST group requirement (#534), restoring the
     /// ordinary single-key delegated attestation paths for `uid`. Same
-    /// authorization as [`Self::set_schema_frost_group`]. Removing a group
+    /// authorization as [`SchemaRegistry::set_schema_frost_group`]. Removing a group
     /// that was never configured is a no-op write plus an event, so callers
     /// can retry safely.
     pub fn clear_schema_frost_group(env: Env, authorizer: Address, uid: UID) {
