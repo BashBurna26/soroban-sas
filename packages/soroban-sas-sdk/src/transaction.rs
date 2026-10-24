@@ -40,6 +40,7 @@ pub struct FootprintAutoTuneOptions {
     /// Pad the simulated footprint with additional keys.
     pub padding: Option<FootprintPadding>,
     /// Fee policy for calculating the resource fee.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fee_policy: Option<crate::client::FeePolicy>,
 }
 
@@ -385,13 +386,22 @@ impl TransactionSubmitter {
         match &mut envelope {
             TransactionEnvelope::Tx(v1) => {
                 let base_fee = v1.tx.fee;
-                let policy = options
-                    .fee_policy
-                    .as_ref()
-                    .unwrap_or(&crate::client::FeePolicy::Default);
-                let computed_fee =
-                    crate::client::apply_fee_policy(base_fee, min_resource_fee, policy)?;
-                v1.tx.fee = computed_fee;
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    let policy = options
+                        .fee_policy
+                        .as_ref()
+                        .unwrap_or(&crate::client::FeePolicy::Default);
+                    let computed_fee =
+                        crate::client::apply_fee_policy(base_fee, min_resource_fee, policy)?;
+                    v1.tx.fee = computed_fee;
+                }
+                #[cfg(target_arch = "wasm32")]
+                {
+                    let resource_fee_u32 =
+                        u32::try_from(min_resource_fee.max(0)).unwrap_or(u32::MAX);
+                    v1.tx.fee = base_fee.saturating_add(resource_fee_u32);
+                }
                 v1.tx.ext = TransactionExt::V1(soroban_data.clone());
             }
             TransactionEnvelope::TxV0(_) => {
