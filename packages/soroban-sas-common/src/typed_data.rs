@@ -125,6 +125,8 @@ pub struct DelegationAuthorization {
     pub schema_scope: DelegationSchemaScope,
     pub permissions: u32,
     pub valid_until: u64,
+}
+
 /// EIP-712 domain separator structure for off-chain message signing.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]

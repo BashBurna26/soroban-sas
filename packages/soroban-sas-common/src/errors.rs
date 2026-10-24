@@ -94,14 +94,14 @@ pub enum SASError {
     /// No issuance or revocation timestamp anchor exists for the UID (#436).
     TimestampAnchorNotFound = 421,
     /// A new attestation was attempted under a schema the protocol admin has quarantined (#539).
-    SchemaQuarantined = 420,
+    SchemaQuarantined = 422,
     /// A time-window resolver rejected an attestation because the recipient's
     /// cooldown period has not elapsed yet (#549).
-    CooldownActive = 421,
+    CooldownActive = 423,
     /// The payment asset is not authorized by the protocol fee allowlist.
-    InvalidToken = 422,
+    InvalidToken = 424,
     /// The attester has exhausted their configured ledger-window quota.
-    RateLimitExceeded = 423,
+    RateLimitExceeded = 425,
 
     /// Circuit breaker errors
     /// The contract is paused and write operations are not permitted (#255).
@@ -122,5 +122,5 @@ pub enum SASError {
     /// outer batch was still executing (#296).
     Reentrancy = 502,
     /// A resolver callback attempted an indirect mutating call back into SAS.
-    ReentrancyDetected = 503,
+    ReentrancyDetected = 508,
 }

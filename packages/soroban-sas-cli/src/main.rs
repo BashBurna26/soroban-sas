@@ -1968,14 +1968,13 @@ fn run_sas(
                 })).collect::<Vec<_>>(),
             });
             let output = if json { OutputFormat::Json } else { output };
+            let uid_str = data["uid"].as_str().unwrap_or_default().to_string();
+            let schema_str = data["schema"].as_str().unwrap_or_default().to_string();
             emit_ok(
                 output,
                 || {
-                    println!("Attestation: {}", data["uid"].as_str().unwrap_or_default());
-                    println!(
-                        "Schema:      {}",
-                        data["schema"].as_str().unwrap_or_default()
-                    );
+                    println!("Attestation: {uid_str}");
+                    println!("Schema:      {schema_str}");
                     println!("\nField                 Type       Value");
                     println!("--------------------  ---------  ------------------------------");
                     for field in &fields {

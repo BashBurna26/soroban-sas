@@ -403,6 +403,10 @@ impl SasMetrics {
             SasEvent::IndexerStrictUpdated(_) => {
                 self.indexer_strict_updated_total.inc();
             }
+            SasEvent::SchemaDeprecated(_) => {
+                self.active_schemas.dec();
+                self.total_active_schemas.dec();
+            }
         }
         timer.observe_duration();
     }

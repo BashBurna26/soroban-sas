@@ -71,7 +71,7 @@ fn decode_address(address: ScAddress) -> Value {
             }
         },
         ScAddress::Contract(Hash(hash)) => {
-            Value::String(stellar_strkey::contract::Contract(hash).to_string())
+            Value::String(stellar_strkey::Contract(hash).to_string())
         }
     }
 }
@@ -99,7 +99,9 @@ fn decode_value(field: &str, ty: &str, value: ScVal) -> Result<Value, DecodeErro
             .to_utf8_string()
             .map(Value::String)
             .map_err(|_| DecodeError(format!("field {field}: string is not valid UTF-8"))),
-        ("bytes", ScVal::Bytes(value)) => Ok(Value::String(format!("0x{value}"))),
+        ("bytes", ScVal::Bytes(value)) => {
+            Ok(Value::String(format!("0x{}", hex::encode(value.as_slice()))))
+        }
         ("address", ScVal::Address(value)) => Ok(decode_address(value)),
         (
             "bool" | "u32" | "uint32" | "i32" | "int32" | "u64" | "uint64" | "i64" | "int64"
@@ -162,7 +164,9 @@ mod tests {
     fn decodes_mixed_schema() {
         let mut payload = xdr(ScVal::Bool(true));
         payload.extend(xdr(ScVal::U32(42)));
-        payload.extend(xdr(ScVal::String("bob".parse().unwrap())));
+        payload.extend(xdr(ScVal::String(soroban_sdk::xdr::ScString(
+            "bob".try_into().unwrap(),
+        ))));
         payload.extend(xdr(ScVal::Bytes(vec![1, 2].try_into().unwrap())));
         let fields = decode_payload(
             "verified bool, count u32, label String, raw Bytes",

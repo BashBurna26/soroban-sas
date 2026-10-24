@@ -5,7 +5,7 @@
 //! attestation graph without reading contract storage.
 
 use crate::UID;
-use soroban_sdk::{contracttype, symbol_short, Address, BytesN, Symbol};
+use soroban_sdk::{contracttype, symbol_short, Address, BytesN, String, Symbol};
 
 /// First topic of every `AttestationIssued` event.
 pub const ATTESTED: Symbol = symbol_short!("ATTESTED");
@@ -470,6 +470,34 @@ pub struct IndexingProgressEvent {
     pub recipient_total: u32,
     pub schema_total: u32,
     pub attester_total: u32,
+}
+
+/// First topic of every `SchemaMetadataUpdated` event (#444).
+pub const SCHEMA_METADATA_UPDATED: Symbol = symbol_short!("METAUPD");
+
+/// Payload of the `SchemaMetadataUpdated` event.
+///
+/// Published with topics `(SCHEMA_METADATA_UPDATED, schema_uid)`.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SchemaMetadataUpdatedEvent {
+    pub schema_uid: UID,
+    pub metadata_uri: String,
+    pub authorizer: Address,
+}
+
+/// Payload of the `FeeDistributed` event.
+///
+/// Published with topics `(FEE_DISTRIBUTED, schema_uid)`.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FeeDistributedEvent {
+    pub schema_uid: UID,
+    pub token: Address,
+    pub total_fee: i128,
+    pub treasury_amount: i128,
+    pub creator_amount: i128,
+    pub creator: Address,
 }
 
 /// Payload of the `SchemaFrostGroupUpdated` event (#534).

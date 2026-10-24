@@ -6,15 +6,16 @@
 use soroban_sas_common::{
     events::{
         CONTRACT_UPGRADED, SCHEMA_DELEGATE_ADDED, SCHEMA_DELEGATE_REMOVED, SCHEMA_DEPRECATED,
-        SCHEMA_FEE_UPDATED, SCHEMA_FROST_GROUP_UPDATED, SCHEMA_OWNERSHIP_PROPOSED,
-        SCHEMA_OWNERSHIP_TRANSFERRED, SCHEMA_QUARANTINED, TREASURY_UPDATED,
+        SCHEMA_FEE_UPDATED, SCHEMA_FROST_GROUP_UPDATED, SCHEMA_METADATA_UPDATED,
+        SCHEMA_OWNERSHIP_PROPOSED, SCHEMA_OWNERSHIP_TRANSFERRED, SCHEMA_QUARANTINED,
+        TREASURY_UPDATED,
     },
     validate_frost_group, validate_schema_lexical, validate_schema_syntax, ContractUpgradedEvent,
-    DelegatesStatus,
-    FrostGroup, PreviousAddress, RevocationPolicy, SASError, SchemaDelegateAddedEvent,
-    SchemaDelegateRemovedEvent, SchemaDeprecatedEvent, SchemaFeeUpdatedEvent,
-    SchemaFrostGroupUpdatedEvent, SchemaOwnershipProposedEvent, SchemaOwnershipTransferredEvent,
-    SchemaRecord, SchemaStatus, TreasuryUpdatedEvent, LEDGERS_IN_ONE_YEAR, UID,
+    DelegatesStatus, FrostGroup, PreviousAddress, RevocationPolicy, SASError, SchemaBatchItem,
+    SchemaDelegateAddedEvent, SchemaDelegateRemovedEvent, SchemaDeprecatedEvent,
+    SchemaFeeUpdatedEvent, SchemaFrostGroupUpdatedEvent, SchemaMetadataUpdatedEvent,
+    SchemaOwnershipProposedEvent, SchemaOwnershipTransferredEvent, SchemaRecord, SchemaStatus,
+    TreasuryUpdatedEvent, LEDGERS_IN_ONE_YEAR, UID,
 };
 use soroban_sdk::{
     contract, contractimpl, contracttype, panic_with_error, token, Address, BytesN, Env, String,
@@ -51,6 +52,18 @@ fn renew_schema_record(env: &Env, uid: &UID) {
     env.storage()
         .persistent()
         .extend_ttl(uid, LEDGERS_IN_ONE_YEAR, LEDGERS_IN_ONE_YEAR);
+    let meta_key = (SCHEMA_METADATA_URI, uid.clone());
+    if env.storage().persistent().has(&meta_key) {
+        env.storage()
+            .persistent()
+            .extend_ttl(&meta_key, LEDGERS_IN_ONE_YEAR, LEDGERS_IN_ONE_YEAR);
+    }
+}
+
+fn validate_metadata_uri(env: &Env, uri: &String) {
+    if uri.len() > MAX_METADATA_URI_LENGTH {
+        panic_with_error!(env, SASError::InvalidValue);
+    }
 }
 
 /// Reads the registry admin, or `Err(NotInitialized)` when the registry has
@@ -1409,7 +1422,7 @@ impl SchemaRegistry {
         if schema_history(&env, predecessor_uid.clone()).len() >= MAX_SCHEMA_HISTORY_DEPTH {
             panic_with_error!(&env, SASError::InvalidSchemaDefinition);
         }
-        let uid = Self::register_internal(env.clone(), owner, schema, resolver, revocable, 0);
+        let uid = Self::register_internal(env.clone(), owner, schema, resolver, revocable, 0, None);
         let key = (SCHEMA_PREDECESSOR, uid.clone());
         env.storage().persistent().set(&key, &predecessor_uid);
         env.storage()
@@ -1519,7 +1532,7 @@ impl SchemaRegistry {
         // The owner must authorize the registration so the emitted event
         // carries a caller identity that off-chain indexers can trust.
         owner.require_auth();
-        Self::register_internal(env, owner, schema, resolver, revocable, 0)
+        Self::register_internal(env, owner, schema, resolver, revocable, 0, None)
     }
 
     /// Registers a new schema with a configurable maximum expiration window limit (#441).
@@ -1532,7 +1545,7 @@ impl SchemaRegistry {
         max_ttl: u64,
     ) -> UID {
         owner.require_auth();
-        Self::register_internal(env, owner, schema, resolver, revocable, max_ttl)
+        Self::register_internal(env, owner, schema, resolver, revocable, max_ttl, None)
     }
 
     /// Alias for `register_with_ttl` (#441).
@@ -1557,7 +1570,7 @@ impl SchemaRegistry {
     ) -> UID {
         owner.require_auth();
         let revocable = policy != RevocationPolicy::IrrevocableOnly;
-        let uid = Self::register_internal(env.clone(), owner, schema, resolver, revocable, 0);
+        let uid = Self::register_internal(env.clone(), owner, schema, resolver, revocable, 0, None);
         let policy_key = (SCHEMA_POLICY, uid.clone());
         env.storage().persistent().set(&policy_key, &policy);
         env.storage().persistent().extend_ttl(
@@ -1783,7 +1796,193 @@ impl SchemaRegistry {
             token::Client::new(&env, &token).transfer(&owner, &treasury, &value);
         }
 
-        Self::register_internal(env, owner, schema, resolver, revocable, max_ttl)
+        Self::register_internal(env, owner, schema, resolver, revocable, max_ttl, None)
+    }
+
+    /// Registers a new schema in the registry with optional metadata URI (#444).
+    pub fn register_schema(
+        env: Env,
+        owner: Address,
+        schema: String,
+        resolver: Address,
+        revocable: bool,
+        metadata_uri: Option<String>,
+    ) -> UID {
+        owner.require_auth();
+        Self::register_internal(env, owner, schema, resolver, revocable, 0, metadata_uri)
+    }
+
+    /// Registers a new schema with both fee payment and optional metadata URI (#444).
+    pub fn register_schema_with_value(
+        env: Env,
+        owner: Address,
+        schema: String,
+        resolver: Address,
+        revocable: bool,
+        token: Address,
+        value: i128,
+        metadata_uri: Option<String>,
+    ) -> UID {
+        if value < 0 {
+            panic_with_error!(&env, SASError::InvalidValue);
+        }
+
+        let configured: Option<(Address, i128)> = env.storage().instance().get(&SCHEMA_FEE);
+        match &configured {
+            Some((fee_token, fee_amount)) => {
+                if &token != fee_token || value != *fee_amount {
+                    panic_with_error!(&env, SASError::FeeMismatch);
+                }
+            }
+            None => {
+                if value != 0 {
+                    panic_with_error!(&env, SASError::FeeMismatch);
+                }
+            }
+        }
+
+        owner.require_auth();
+
+        if value > 0 {
+            let treasury: Address = env
+                .storage()
+                .instance()
+                .get(&TREASURY)
+                .unwrap_or_else(|| panic_with_error!(&env, SASError::TreasuryNotSet));
+            token::Client::new(&env, &token).transfer(&owner, &treasury, &value);
+        }
+
+        Self::register_internal(env, owner, schema, resolver, revocable, 0, metadata_uri)
+    }
+
+    /// Registers a new schema with metadata URI (#444).
+    pub fn register_with_metadata(
+        env: Env,
+        owner: Address,
+        schema: String,
+        resolver: Address,
+        revocable: bool,
+        metadata_uri: String,
+    ) -> UID {
+        owner.require_auth();
+        Self::register_internal(
+            env,
+            owner,
+            schema,
+            resolver,
+            revocable,
+            0,
+            Some(metadata_uri),
+        )
+    }
+
+    /// Updates the metadata URI for an existing schema (#444).
+    /// Only the schema owner can update the metadata URI.
+    /// Emits `SchemaMetadataUpdated`.
+    pub fn update_schema_metadata(env: Env, uid: UID, authorizer: Address, metadata_uri: String) {
+        extend_instance_ttl(&env);
+        require_transferable_schema(&env, &uid);
+        authorizer.require_auth();
+
+        if !is_owner_address(&env, &uid, &authorizer) {
+            panic_with_error!(&env, SASError::Unauthorized);
+        }
+
+        validate_metadata_uri(&env, &metadata_uri);
+
+        let meta_key = (SCHEMA_METADATA_URI, uid.clone());
+        env.storage().persistent().set(&meta_key, &metadata_uri);
+        env.storage()
+            .persistent()
+            .extend_ttl(&meta_key, LEDGERS_IN_ONE_YEAR, LEDGERS_IN_ONE_YEAR);
+        renew_schema_record(&env, &uid);
+
+        env.events().publish(
+            (SCHEMA_METADATA_UPDATED, uid.clone()),
+            SchemaMetadataUpdatedEvent {
+                schema_uid: uid,
+                metadata_uri,
+                authorizer,
+            },
+        );
+
+        extend_instance_ttl(&env);
+    }
+
+    /// Returns the metadata URI associated with `uid`, or None if unset or deprecated (#444).
+    pub fn get_schema_metadata(env: Env, uid: UID) -> Option<String> {
+        extend_instance_ttl(&env);
+        if env
+            .storage()
+            .persistent()
+            .get(&(DEPRECATED, uid.clone()))
+            .unwrap_or(false)
+        {
+            return None;
+        }
+        let meta_key = (SCHEMA_METADATA_URI, uid.clone());
+        let uri: Option<String> = env.storage().persistent().get(&meta_key);
+        if uri.is_some() {
+            env.storage().persistent().extend_ttl(
+                &meta_key,
+                LEDGERS_IN_ONE_YEAR,
+                LEDGERS_IN_ONE_YEAR,
+            );
+            renew_schema_record(&env, &uid);
+        }
+        uri
+    }
+
+    /// Alias for `get_schema_metadata` (#444).
+    pub fn get_schema_metadata_uri(env: Env, uid: UID) -> Option<String> {
+        Self::get_schema_metadata(env, uid)
+    }
+
+    /// Returns both the [`SchemaRecord`] and metadata URI for `uid` if found (#444).
+    pub fn get_schema_with_metadata(env: Env, uid: UID) -> Option<(SchemaRecord, Option<String>)> {
+        let record = Self::get_schema(env.clone(), uid.clone())?;
+        let metadata = Self::get_schema_metadata(env, uid);
+        Some((record, metadata))
+    }
+
+    /// Atomically registers a batch of schema definitions (#445).
+    /// Reverts if vector length exceeds `MAX_SCHEMA_BATCH_SIZE` or is empty.
+    /// Emits individual `SchemaRegistered` events for each item in the batch.
+    pub fn register_schemas_batch(
+        env: Env,
+        schemas_vec: soroban_sdk::Vec<SchemaBatchItem>,
+    ) -> soroban_sdk::Vec<UID> {
+        extend_instance_ttl(&env);
+        let len = schemas_vec.len();
+        if len > MAX_SCHEMA_BATCH_SIZE {
+            panic_with_error!(&env, SASError::BatchTooLarge);
+        }
+        if len == 0 {
+            panic_with_error!(&env, SASError::InvalidValue);
+        }
+
+        let mut uids = soroban_sdk::Vec::new(&env);
+        let mut authorized_owners = soroban_sdk::Map::new(&env);
+
+        for item in schemas_vec.into_iter() {
+            if !authorized_owners.contains_key(item.owner.clone()) {
+                item.owner.require_auth();
+                authorized_owners.set(item.owner.clone(), true);
+            }
+            let uid = Self::register_internal(
+                env.clone(),
+                item.owner,
+                item.schema,
+                item.resolver,
+                item.revocable,
+                0,
+                None,
+            );
+            uids.push_back(uid);
+        }
+
+        extend_instance_ttl(&env);
+        uids
     }
 
     /// Registers a schema in an optional, searchable namespace (#535).
@@ -1803,7 +2002,7 @@ impl SchemaRegistry {
         if let Some(ref name) = category {
             validate_category(&env, name);
         }
-        let uid = Self::register_internal(env.clone(), owner, schema, resolver, revocable, 0);
+        let uid = Self::register_internal(env.clone(), owner, schema, resolver, revocable, 0, None);
         if let Some(name) = category {
             if !name.is_empty() {
                 index_category(&env, &uid, &name);
@@ -1889,6 +2088,7 @@ impl SchemaRegistry {
         resolver: Address,
         revocable: bool,
         max_ttl: u64,
+        metadata_uri: Option<String>,
     ) -> UID {
         extend_instance_ttl(&env);
         // Strict lexical validation first (#447): control characters, invalid
@@ -1948,6 +2148,17 @@ impl SchemaRegistry {
             env.storage().persistent().set(&policy_key, &default_policy);
             env.storage().persistent().extend_ttl(
                 &policy_key,
+                LEDGERS_IN_ONE_YEAR,
+                LEDGERS_IN_ONE_YEAR,
+            );
+        }
+
+        if let Some(uri) = metadata_uri {
+            validate_metadata_uri(&env, &uri);
+            let meta_key = (SCHEMA_METADATA_URI, uid.clone());
+            env.storage().persistent().set(&meta_key, &uri);
+            env.storage().persistent().extend_ttl(
+                &meta_key,
                 LEDGERS_IN_ONE_YEAR,
                 LEDGERS_IN_ONE_YEAR,
             );
