@@ -47,6 +47,8 @@ export interface SASClientConfig {
   signTransaction?: SignTransaction;
   /** Optional SEP-43 authorization signer for multi-auth invocations. */
   signAuthEntry?: ClientOptions["signAuthEntry"];
+  /** Secret seed (S...); prohibited in browser contexts. */
+  secret?: string;
 }
 
 export interface SubmitResult {
