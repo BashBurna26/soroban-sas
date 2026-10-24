@@ -3248,6 +3248,7 @@ mod test_issue_293;
 #[cfg(test)]
 mod test_issue_296;
 #[cfg(test)]
+mod test_issue_492;
 mod test_merkle_disclosure;
 mod test_issue_491;
 #[cfg(test)]
