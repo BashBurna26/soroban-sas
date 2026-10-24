@@ -42,6 +42,7 @@ fn make_test_attestation(
 /// Measures throughput of attestation UID derivation across batch sizes.
 fn bench_attestation_uid_batch(c: &mut Criterion) {
     let env = Env::default();
+    env.budget().reset_unlimited();
     let schema_uid = UID(BytesN::from_array(&env, &[1u8; 32]));
     let attester = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -69,6 +70,7 @@ fn bench_attestation_uid_batch(c: &mut Criterion) {
 /// Measures processing time for a 10,000-attestations workload (simulating 10k per ledger).
 fn bench_10k_attestations_workload(c: &mut Criterion) {
     let env = Env::default();
+    env.budget().reset_unlimited();
     let schema_uid = UID(BytesN::from_array(&env, &[1u8; 32]));
     let attester = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -152,6 +154,7 @@ fn bench_chunk_write_size_bounds(c: &mut Criterion) {
 /// Stress test: processes a large attestation sequence chunked adaptively.
 fn bench_large_attestation_sequence_chunked(c: &mut Criterion) {
     let env = Env::default();
+    env.budget().reset_unlimited();
     let schema_uid = UID(BytesN::from_array(&env, &[3u8; 32]));
     let attester = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -214,6 +217,7 @@ fn bench_chunk_read_throughput(c: &mut Criterion) {
 /// Measures throughput for multi-attest batch sizes representing transaction units.
 fn bench_multi_attest_batch_formation(c: &mut Criterion) {
     let env = Env::default();
+    env.budget().reset_unlimited();
     let schema_uid = UID(BytesN::from_array(&env, &[2u8; 32]));
     let attester = Address::generate(&env);
     let recipient = Address::generate(&env);
@@ -251,6 +255,7 @@ fn bench_multi_attest_batch_formation(c: &mut Criterion) {
 /// while also exercising a bounded working set to keep the benchmark runnable.
 fn bench_state_bloat_100m_entries(c: &mut Criterion) {
     let env = Env::default();
+    env.budget().reset_unlimited();
     let schema_uid = UID(BytesN::from_array(&env, &[3u8; 32]));
     let attester = Address::generate(&env);
     let recipient = Address::generate(&env);
