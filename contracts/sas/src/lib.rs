@@ -836,16 +836,17 @@ impl SAS {
         Self::attest_internal(env, attestation)
     }
 
-    /// Issues an attestation endorsed by an off-chain ed25519 signature and
-    /// relayed by any funded account.
-    ///
-    /// When the schema declares a FROST threshold group (#534), `public_key`
-    /// must be that group's public key and `signature` a standard 64-byte
-    /// Ed25519 aggregate produced by at least `threshold` shares. The attester
-    /// account key and registered attester keys are not accepted for such a
-    /// schema. A FROST aggregate has exactly the same shape as a single-signer
-    /// signature, so this entrypoint's calldata and its single
-    /// `ed25519_verify` cost are unchanged.
+    /// Pure digest oracle for cross-language off-chain signing parity (#489).
+    /// Uses the exact domain of attest_by_delegation but does not mutate state.
+    pub fn hash_delegation_digest(env: Env, attestation: Attestation, nonce: u64) -> BytesN<32> {
+        let domain = soroban_sas_common::AttestationDomain {
+            network_id: env.ledger().network_id(),
+            contract: env.current_contract_address(),
+            nonce,
+        };
+        soroban_sas_common::hash_offchain_attestation(&env, &attestation, &domain)
+    }
+
     pub fn attest_by_delegation(
         env: Env,
         attestation: Attestation,

@@ -98,6 +98,12 @@ pub const SCHEMA_OWNER_TRANSFER_CANCELLED: Symbol = symbol_short!("OWNCANC");
 /// checks unbounded.
 pub const MAX_OWNER_SET: u32 = 10;
 
+/// (CATEGORY_COUNT, category) -> number of registrations within a namespace.
+pub const CATEGORY_COUNT: Symbol = symbol_short!("CATCOUNT");
+/// (CATEGORY_INDEX, category, offset) -> schema UID (append-only index).
+pub const CATEGORY_INDEX: Symbol = symbol_short!("CATINDEX");
+/// (SCHEMA_CATEGORY, uid) -> optional category kept apart from SchemaRecord.
+pub const SCHEMA_CATEGORY: Symbol = symbol_short!("CATSCHEMA");
 /// Version lineage: (SCHEMA_PREDECESSOR, derivative_uid) -> predecessor_uid.
 /// Separate from SchemaRecord to retain its frozen XDR layout.
 pub const SCHEMA_PREDECESSOR: Symbol = symbol_short!("PREDSCHE");
