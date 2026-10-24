@@ -5,7 +5,7 @@
 //! attestation graph without reading contract storage.
 
 use crate::UID;
-use soroban_sdk::{contracttype, symbol_short, Address, BytesN, Symbol};
+use soroban_sdk::{contracttype, symbol_short, Address, BytesN, String, Symbol};
 
 /// First topic of every `AttestationIssued` event.
 pub const ATTESTED: Symbol = symbol_short!("ATTESTED");
@@ -39,6 +39,8 @@ pub const ADMIN_TRANSFER_COMPLETED: Symbol = symbol_short!("ADMCOMP");
 pub const SCHEMA_OWNERSHIP_TRANSFERRED: Symbol = symbol_short!("SCHOWN");
 /// First topic of every `SchemaOwnershipProposed` event (#446).
 pub const SCHEMA_OWNERSHIP_PROPOSED: Symbol = symbol_short!("SCHPROP");
+/// First topic of every `SchemaOwnershipTransferCancelled` event (#446).
+pub const SCHEMA_OWNERSHIP_CANCELLED: Symbol = symbol_short!("SCHCANC");
 /// First topic of every `NoncesInvalidated` event (#437).
 pub const NONCES_INVALIDATED: Symbol = symbol_short!("NONCEINV");
 /// First topic of every `BatchAttested` event.
@@ -49,6 +51,8 @@ pub const BATCH_REVOKED: Symbol = symbol_short!("BATCHREV");
 pub const INDEXER_STRICT_UPDATED: Symbol = symbol_short!("IDXSTRUP");
 /// First topic of every `SchemaDeprecated` event.
 pub const SCHEMA_DEPRECATED: Symbol = symbol_short!("SCHDEP");
+/// First topic of every `SchemaFrostGroupUpdated` event (#534).
+pub const SCHEMA_FROST_GROUP_UPDATED: Symbol = symbol_short!("FROSTGRP");
 /// First topic of every `ContractPaused` event.
 pub const CONTRACT_PAUSED: Symbol = symbol_short!("PAUSED");
 /// First topic of every `ContractUnpaused` event.
@@ -81,6 +85,32 @@ pub struct AttestationIssuedEvent {
     pub schema_uid: UID,
     pub attester: Address,
     pub recipient: Address,
+}
+
+/// Fee-aware issuance event emitted by the opt-in paid path (#526).
+/// The existing `ATTESTED` event is retained for v1 indexer compatibility.
+pub const ATTFEE: Symbol = symbol_short!("ATTFEE");
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AttestationIssuedWithFeeEvent {
+    pub uid: UID,
+    pub schema_uid: UID,
+    pub attester: Address,
+    pub recipient: Address,
+    pub fee_amount: i128,
+}
+
+/// Detailed protocol circuit-breaker events (#530), emitted in addition to
+/// legacy pause events to preserve the existing wire format.
+pub const PROTOCOL_PAUSED: Symbol = symbol_short!("PRTPAUSED");
+pub const PROTOCOL_UNPAUSED: Symbol = symbol_short!("PRTUNPAUS");
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProtocolPauseEvent {
+    pub authorizer: Address,
+    pub timestamp: u64,
 }
 
 /// Payload of the `AttestationRevoked` event.
@@ -440,4 +470,52 @@ pub struct IndexingProgressEvent {
     pub recipient_total: u32,
     pub schema_total: u32,
     pub attester_total: u32,
+}
+
+/// First topic of every `SchemaMetadataUpdated` event (#444).
+pub const SCHEMA_METADATA_UPDATED: Symbol = symbol_short!("METAUPD");
+
+/// Payload of the `SchemaMetadataUpdated` event.
+///
+/// Published with topics `(SCHEMA_METADATA_UPDATED, schema_uid)`.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SchemaMetadataUpdatedEvent {
+    pub schema_uid: UID,
+    pub metadata_uri: String,
+    pub authorizer: Address,
+}
+
+/// Payload of the `FeeDistributed` event.
+///
+/// Published with topics `(FEE_DISTRIBUTED, schema_uid)`.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FeeDistributedEvent {
+    pub schema_uid: UID,
+    pub token: Address,
+    pub total_fee: i128,
+    pub treasury_amount: i128,
+    pub creator_amount: i128,
+    pub creator: Address,
+}
+
+/// Payload of the `SchemaFrostGroupUpdated` event (#534).
+///
+/// Published with topics `(SCHEMA_FROST_GROUP_UPDATED, schema_uid)` whenever a
+/// schema owner sets, rotates, or clears the FROST group that governs
+/// delegated signatures for that schema. The fields are flattened instead of
+/// carrying an `Option<FrostGroup>` because optional nested contract types are
+/// not encodable here (the same constraint documented on [`PreviousAddress`]).
+/// `enabled == false` means the requirement was cleared; the key is then the
+/// all-zero sentinel and both counters are `0`.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SchemaFrostGroupUpdatedEvent {
+    pub schema_uid: UID,
+    pub authorizer: Address,
+    pub enabled: bool,
+    pub group_public_key: BytesN<32>,
+    pub threshold: u32,
+    pub max_signers: u32,
 }

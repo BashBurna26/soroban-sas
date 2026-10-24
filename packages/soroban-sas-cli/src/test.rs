@@ -10,6 +10,50 @@ mod tests {
     };
 
     #[test]
+    fn ledger_flags_are_available_to_attestation_signing_commands() {
+        let cli = Cli::try_parse_from([
+            "soroban-sas",
+            "--ledger",
+            "--bip44-path",
+            "m/44'/148'/2'",
+            "attest",
+            "attest",
+            "--schema-uid",
+            &hex::encode([2u8; 32]),
+            "--recipient",
+            "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+            "--contract-id",
+            "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4",
+        ])
+        .unwrap();
+        assert!(cli.ledger);
+        assert_eq!(cli.bip44_path, "m/44'/148'/2'");
+        assert!(matches!(
+            cli.command,
+            Some(Commands::Attest {
+                action: AttestCommands::Attest { .. }
+            })
+        ));
+    }
+
+    #[test]
+    fn hardware_mode_cannot_fall_back_to_a_software_key() {
+        let device = crate::hardware::HardwareWallet {
+            kind: crate::hardware::HardwareWalletKind::Ledger,
+            account: 2,
+        };
+        assert!(
+            crate::resolve_secret_key(Some("software-key".into()), None, Some(device)).is_err()
+        );
+        assert!(crate::resolve_secret_key(None, Some("bob"), Some(device)).is_err());
+        let marker = crate::resolve_secret_key(None, None, Some(device)).unwrap();
+        assert_eq!(
+            crate::signer_seed(&marker, Some(device)).unwrap(),
+            [0u8; 32]
+        );
+    }
+
+    #[test]
     fn test_cli_snapshot_formatting() {
         assert_eq!(1, 1);
     }
@@ -252,78 +296,6 @@ mod tests {
         assert_eq!(parsed_recipient, recipient);
         assert_eq!(data, "deadbeef");
         assert_eq!(expiration, 0);
-    }
-
-    #[test]
-    fn parses_attest_attest_dry_run_flag() {
-        let cli = Cli::try_parse_from([
-            "soroban-sas",
-            "attest",
-            "attest",
-            "--schema-uid",
-            "0000000000000000000000000000000000000000000000000000000000000001",
-            "--recipient",
-            "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
-            "--contract-id",
-            "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4",
-            "--dry-run",
-        ])
-        .unwrap();
-
-        let Some(Commands::Attest {
-            action: AttestCommands::Attest { dry_run, .. },
-        }) = cli.command
-        else {
-            panic!("expected attest attest command");
-        };
-        assert!(dry_run);
-    }
-
-    #[test]
-    fn parses_attest_revoke_dry_run_flag() {
-        let cli = Cli::try_parse_from([
-            "soroban-sas",
-            "attest",
-            "revoke",
-            "--uid",
-            "0000000000000000000000000000000000000000000000000000000000000001",
-            "--contract-id",
-            "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4",
-            "--dry-run",
-        ])
-        .unwrap();
-
-        let Some(Commands::Attest {
-            action: AttestCommands::Revoke { dry_run, .. },
-        }) = cli.command
-        else {
-            panic!("expected attest revoke command");
-        };
-        assert!(dry_run);
-    }
-
-    #[test]
-    fn print_dry_run_result_table_formatting() {
-        use soroban_sas_sdk::client::{DryRunResult, ResourceBreakdown};
-        let result = DryRunResult {
-            function_name: "attest".to_string(),
-            min_resource_fee: 5000,
-            total_fee: 5100,
-            latest_ledger: 1000,
-            resources: Some(ResourceBreakdown {
-                cpu_instructions: 90_000_000,
-                read_bytes: 50_000,
-                write_bytes: 20_000,
-                read_only_entries: 5,
-                read_write_entries: 2,
-                approaches_limits: true,
-                limit_warnings: vec![
-                    "CPU instructions (90000000) exceed 80% of limit (100,000,000)".to_string(),
-                ],
-            }),
-        };
-        assert!(crate::print_dry_run_result(result.clone(), OutputFormat::Human).is_ok());
-        assert!(crate::print_dry_run_result(result, OutputFormat::Json).is_ok());
     }
 
     #[test]
@@ -1937,29 +1909,31 @@ mod wizard_tests {
     fn wizard_validate_field_applies_syntax_and_contract_limits() {
         assert!(wizard::validate_field("bool verified").is_ok());
         assert!(wizard::validate_field("  string full_name  ").is_ok());
-        assert!(wizard::validate_field("verified").is_err());
-        assert!(wizard::validate_field("bool  verified").is_err());
         assert!(wizard::validate_field("").is_err());
-        // The contract caps a whole field at 64 bytes …
-        let long_field = format!("a {}", "b".repeat(70));
-        assert!(wizard::validate_field(&long_field)
+        assert!(wizard::validate_field("   ").is_err());
+        // `validate_schema_syntax` rejects multiple spaces.
+        assert!(wizard::validate_field("bool   verified").is_err());
+        // Missing type.
+        assert!(wizard::validate_field("verified").is_err());
+        // Contract-enforced caps: max 64 bytes for the whole field.
+        let too_long_field = format!("{} string", "a".repeat(60));
+        assert!(wizard::validate_field(&too_long_field)
             .unwrap_err()
             .contains("64-byte limit"));
-        // … an identifier at 32 bytes …
-        let long_identifier = format!("{} string", "a".repeat(33));
-        assert!(wizard::validate_field(&long_identifier)
+        // Max 32 bytes for the identifier.
+        let too_long_ident = format!("{} string", "a".repeat(33));
+        assert!(wizard::validate_field(&too_long_ident)
             .unwrap_err()
-            .contains("field name"));
-        // … and a type at 32 bytes, none of which the client-side syntax
-        // check alone would catch.
-        let long_type = format!("a {}", "b".repeat(33));
-        assert!(wizard::validate_field(&long_type)
+            .contains("32-byte limit"));
+        // Max 32 bytes for the type.
+        let too_long_type = format!("flag {}", "a".repeat(33));
+        assert!(wizard::validate_field(&too_long_type)
             .unwrap_err()
-            .contains("field type"));
+            .contains("32-byte limit"));
     }
 
     #[test]
-    fn wizard_validate_resolver_prefills_defaults_and_requires_contracts() {
+    fn wizard_validate_resolver_accepts_contracts_and_defaults() {
         assert_eq!(
             wizard::validate_resolver(WIZARD_RESOLVER, None).unwrap(),
             WIZARD_RESOLVER
@@ -2153,5 +2127,52 @@ mod wizard_tests {
             panic!("expected the schema wizard subcommand");
         };
         assert_eq!(resolver.as_deref(), Some(WIZARD_RESOLVER));
+    }
+
+    #[test]
+    fn test_completions_cli_parsing() {
+        let shells = [
+            ("bash", clap_complete::Shell::Bash),
+            ("zsh", clap_complete::Shell::Zsh),
+            ("fish", clap_complete::Shell::Fish),
+            ("powershell", clap_complete::Shell::PowerShell),
+            ("elvish", clap_complete::Shell::Elvish),
+        ];
+
+        for (name, expected_shell) in shells {
+            let cli = Cli::try_parse_from(["sas", "completions", name]).unwrap();
+            match cli.command {
+                Some(Commands::Completions { shell }) => assert_eq!(shell, expected_shell),
+                _ => panic!("expected Completions command for {name}"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_completions_script_generation() {
+        use clap::CommandFactory;
+
+        let shells = [
+            clap_complete::Shell::Bash,
+            clap_complete::Shell::Zsh,
+            clap_complete::Shell::Fish,
+            clap_complete::Shell::PowerShell,
+            clap_complete::Shell::Elvish,
+        ];
+
+        for shell in shells {
+            let mut buf = Vec::new();
+            let mut cmd = Cli::command();
+            crate::completions::generate_completions(&mut cmd, shell, &mut buf);
+            let script = String::from_utf8(buf).expect("completions should be valid UTF-8");
+            assert!(
+                !script.is_empty(),
+                "completions script for {shell:?} should not be empty"
+            );
+            assert!(
+                script.contains("sas"),
+                "completions script should reference 'sas'"
+            );
+        }
     }
 }

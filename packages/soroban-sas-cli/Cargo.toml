@@ -6,8 +6,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-base64 = "0.22"
+base64 = "0.23"
 clap = { version = "4.0", features = ["derive", "env"] }
+clap_complete = "=4.5.20"
 # Interactive terminal prompts (validators, confirmations) for the
 # `schema wizard` command (#469). Default features off: the optional
 # `editor`/`password` extras pull tempfile's getrandom 0.4 tree, which
@@ -19,10 +20,13 @@ hex = "0.4"
 toml = "0.8"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+sha2 = "0.10"
 soroban-sas-common = { path = "../soroban-sas-common" }
 soroban-sas-sdk = { path = "../soroban-sas-sdk" }
 soroban-sdk = { workspace = true, features = ["testutils"] }
 stellar-strkey = "0.0.8"
+thiserror = "1"
+ureq = { version = "2", default-features = false, features = ["json", "tls"] }
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }
