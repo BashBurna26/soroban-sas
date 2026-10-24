@@ -20,8 +20,8 @@ export function useRecipientAttestations(address: string | null | undefined) {
     address ? [...keyPrefix, "recipient", address] : null,
     async () => {
       const uids = await client.getRecipientAttestations(address!);
-      const rows = await Promise.all(uids.map((uid) => client.getAttestation(uid)));
-      return rows.filter((row): row is Attestation => row !== null);
+      const rows = await Promise.all(uids.map((uid: string) => client.getAttestation(uid)));
+      return rows.filter((row: Attestation | null): row is Attestation => row !== null);
     },
   );
 }

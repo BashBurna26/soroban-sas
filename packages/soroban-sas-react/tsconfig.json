@@ -15,7 +15,11 @@
     "declaration": true,
     "outDir": "dist",
     "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "baseUrl": ".",
+    "paths": {
+      "@soroban-sas/sdk": ["../soroban-sas-js/src/index.ts"]
+    }
   },
   "include": [
     "src",
