@@ -16,6 +16,9 @@ jobs:
       - name: Test pre-commit / pre-push hooks and installer
         run: ./scripts/test_git_hooks.sh
 
+      - name: Validate issue templates
+        run: bash scripts/test_issue_templates.sh
+
   release-tooling:
     name: Release tooling
     runs-on: ubuntu-latest

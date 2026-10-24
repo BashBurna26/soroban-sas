@@ -16,11 +16,48 @@ first_name String, last_name String, document_id Bytes
 This keeps the on-chain representation compact while still giving the
 contracts and CLI enough structure to reject malformed inputs.
 
+### Decoding attestation payloads
+
+The CLI can decode a stored payload using the schema referenced by the
+attestation:
+
+```bash
+soroban-sas-cli sas decode --uid "$ATTESTATION_UID" \
+  --contract-id "$SAS_CONTRACT_ID" \
+  --registry-contract-id "$SCHEMA_REGISTRY_CONTRACT_ID" \
+  --rpc-url "$SOROBAN_RPC_URL" --json
+```
+
+Payload fields are encoded in schema order, with each field represented by its
+Soroban `ScVal` XDR encoding. The decoder rejects unsupported types, invalid
+UTF-8, type mismatches, truncated values, malformed XDR, and trailing bytes
+rather than returning a partial result.
+
 ### Creating a Schema
 When registering a schema, the caller provides a deterministic UID and the
 schema string above. The validator rejects whitespace-only values, entries
 without at least one `name Type` pair, and strings that do not resemble a
 field declaration.
+
+## Schema Definition Hygiene
+
+Schema definition strings are validated with strict lexical rules before the
+structural `name Type` parser runs. A registration is rejected with
+`SASError::InvalidSchemaDefinition` when the string contains:
+
+- ASCII control characters (`< 0x20`, including tabs, newlines, carriage
+  returns, and the null byte) or `DEL` (`0x7F`);
+- invalid UTF-8, or invisible / non-ASCII unicode whitespace such as a
+  non-breaking space (`U+00A0`), zero-width space (`U+200B`), byte-order mark
+  (`U+FEFF`), or ideographic space (`U+3000`);
+- malformed separators: a leading or trailing comma, two consecutive spaces,
+  a space immediately before a comma, or more than one space after a comma.
+
+These rules enforce a single canonical spelling for any given schema. Without
+them, two visually identical schema strings that differ only by an invisible
+code point or redundant whitespace would hash to different UIDs, producing
+phantom duplicate schemas and divergence between on-chain and off-chain
+parsers.
 
 Two ceilings bound the size of a schema string:
 - **Byte length**: at most 1024 bytes (`MAX_SCHEMA_LENGTH`).
@@ -103,6 +140,44 @@ Existing boolean revocable schemas map cleanly to this model:
 
 This is enforced once, inside `attest_internal`, before the attestation is stored or the resolver is invoked — every issuance path (`attest`, `attest_by_delegation`, `attest_with_value`, `multi_attest`, and `replace_attestation`) shares this same check, so none of them can bypass it. Note this only constrains issuance: it does not change how `revoke`/`multi_revoke`/`replace_attestation` behave once an attestation exists, which continue to key off the attestation's own `revocable` flag.
 
+## Threshold Endorsement Groups (FROST)
+
+A schema can require a FROST threshold group for delegated signatures, so `t`
+of `n` authorized nodes must jointly endorse an attestation before it can be
+issued through `attest_by_delegation`:
+
+```rust
+registry.set_schema_frost_group(
+    &authorizer, // schema owner or registry admin
+    &schema_uid,
+    &FrostGroup { group_public_key, threshold, max_signers },
+);
+registry.get_schema_frost_group(&schema_uid); // Option<FrostGroup>
+registry.clear_schema_frost_group(&authorizer, &schema_uid);
+```
+
+Configuration rules enforced at declaration time:
+
+- `2 <= threshold <= max_signers <= 255` (`SASError::InvalidValue` /
+  `SASError::LimitExceeded` otherwise),
+- `group_public_key` must not be the all-zero sentinel,
+- the schema must exist and not be deprecated (`SASError::SchemaNotFound`),
+- only the schema owner/admin may set or clear it (`SASError::Unauthorized`).
+
+The group is stored in a dedicated key beside the schema record, so
+`SchemaRecord`'s serialized layout — and therefore every existing schema UID —
+is unchanged. Declaration/rotation/clearing emits `SchemaFrostGroupUpdated`.
+
+For delegated issuance and revocation the group replaces the single-key
+binding: the relayer's supplied 32-byte public key must equal the declared group
+key, and the 64-byte signature must verify as a standard Ed25519 signature under
+it. FROST aggregates look exactly like single-signer signatures on chain, so the
+calldata footprint and verification cost do not change. Under-threshold
+aggregates are invalid Ed25519 signatures under the group key and are rejected.
+See [Delegated Issuance](delegation.md#threshold-endorsement-with-frost) for the
+full flow and `packages/soroban-sas-common/test_vectors/frost_threshold.tsv` for
+2-of-3 and 3-of-5 test vectors.
+
 ## Payload Size
 
 The `data` field of every attestation is bounded by `MAX_ATTESTATION_DATA_BYTES`
@@ -164,13 +239,21 @@ This applies uniformly to every attestation issuance path — `attest`, `attest_
 
 A resolver's failure is a normal, typed contract error (`SASError::ResolverRejected`), the same class of outcome as `SASError::InvalidSchema` or `SASError::NotRevocable` — callers should expect and handle it, not treat it as exceptional. There is deliberately no separate "resolver failed" event: a panic discards any event the same call would have published — including, for revocation, the `AttestationRevoked` event published just before `on_revoke` runs — so the typed error returned to the caller is the only — and sufficient — signal.
 
+### Bundled Resolvers
+
+- `contracts/permissive-resolver` accepts every attestation and revocation. It exists so integration tests can point a schema at a resolver that enforces nothing; do not use it in production.
+- [`contracts/time-window-resolver`](time-window-resolver.md) enforces a configurable cooldown between attestations issued to the same recipient, rejecting issuance inside the window with `SASError::CooldownActive` (surfaced through SAS as `SASError::ResolverRejected`). It is the production example of a stateful, policy-enforcing resolver.
+
 ## Delegated Issuance and Schema Allow-lists (#7)
 
 To support DAOs, enterprise organizations, and multi-issuer systems without sharing private keys or registering duplicate schemas, schema owners can maintain a dynamic allow-list of authorized delegates.
 
 ### Management
-- `add_delegate(uid: UID, delegate: Address)`: Adds an address to the schema's allow-list. Requires authorization from the primary schema owner. Emits `SchemaDelegateAdded`.
+- `add_delegate(uid: UID, delegate: Address)`: Adds an address to the schema's allow-list with perpetual validity. Requires authorization from the primary schema owner. Emits `SchemaDelegateAdded`.
+- `add_delegate_with_expiry(schema_uid: UID, delegate: Address, expiry_timestamp: u64)`: Adds an address to the schema's allow-list with an expiration timestamp. Once `expiry_timestamp` has passed, the delegate automatically loses permissions without requiring manual revocation. Requires authorization from the primary schema owner. Emits `SchemaDelegateAdded`.
 - `remove_delegate(uid: UID, delegate: Address)`: Removes an address from the schema's allow-list. Requires authorization from the primary schema owner. Emits `SchemaDelegateRemoved`.
+- `self_revoke_delegate(uid: UID, delegate: Address)`: Allows a delegate to self-revoke their own authorization at any time. Requires authorization from the delegate. Emits `SchemaDelegateRemoved`.
+- `get_delegates(uid: UID)`: Returns `DelegatesStatus { active, expired }`, partitioning the schema's registered delegates into currently active (within validity window or perpetual) vs expired.
 
 ### Verification and Issuance
 - When an attestation is submitted to SAS, `attest_internal` queries the schema registry's `is_authorized(uid, attester)` method.
