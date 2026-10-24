@@ -6,12 +6,13 @@
 use soroban_sas_common::{
     events::{
         CONTRACT_UPGRADED, SCHEMA_DELEGATE_ADDED, SCHEMA_DELEGATE_REMOVED, SCHEMA_DEPRECATED,
-        SCHEMA_FEE_UPDATED, SCHEMA_OWNERSHIP_PROPOSED, SCHEMA_OWNERSHIP_TRANSFERRED,
-        SCHEMA_QUARANTINED, TREASURY_UPDATED,
+        SCHEMA_FEE_UPDATED, SCHEMA_FROST_GROUP_UPDATED, SCHEMA_OWNERSHIP_PROPOSED,
+        SCHEMA_OWNERSHIP_TRANSFERRED, SCHEMA_QUARANTINED, TREASURY_UPDATED,
     },
-    validate_schema_syntax, ContractUpgradedEvent, PreviousAddress, RevocationPolicy, SASError,
-    SchemaDelegateAddedEvent, SchemaDelegateRemovedEvent, SchemaDeprecatedEvent,
-    SchemaFeeUpdatedEvent, SchemaOwnershipProposedEvent, SchemaOwnershipTransferredEvent,
+    validate_frost_group, validate_schema_syntax, ContractUpgradedEvent, FrostGroup,
+    PreviousAddress, RevocationPolicy, SASError, SchemaDelegateAddedEvent,
+    SchemaDelegateRemovedEvent, SchemaDeprecatedEvent, SchemaFeeUpdatedEvent,
+    SchemaFrostGroupUpdatedEvent, SchemaOwnershipProposedEvent, SchemaOwnershipTransferredEvent,
     SchemaRecord, SchemaStatus, TreasuryUpdatedEvent, LEDGERS_IN_ONE_YEAR, UID,
 };
 use soroban_sdk::{
@@ -1291,6 +1292,107 @@ impl SchemaRegistry {
     /// Alias for `get_schema_policy` (#448).
     pub fn get_revocation_policy(env: Env, uid: UID) -> RevocationPolicy {
         Self::get_schema_policy(env, uid)
+    }
+
+    /// Declares, or rotates, the FROST threshold group whose aggregate
+    /// signatures must endorse delegated attestations under `uid` (#534).
+    ///
+    /// Only a schema owner (the creator, a member of the configured owner set)
+    /// or the registry admin may declare the group, and `authorizer` must
+    /// authorize the call. The group is validated with
+    /// [`validate_frost_group`] before anything is written: a threshold below
+    /// two, a threshold above `max_signers`, a group larger than
+    /// `MAX_FROST_SIGNERS`, or an all-zero group key is rejected.
+    ///
+    /// Once set, SAS stops binding delegated signatures to
+    /// `attestation.attester`'s account/registered key for this schema and
+    /// accepts only aggregates that verify under `group.group_public_key`.
+    /// The stored `SchemaRecord` is unchanged, so the XDR layout of existing
+    /// schemas is preserved.
+    ///
+    /// Emits `SchemaFrostGroupUpdated` with the new group, so indexers and
+    /// wallets can discover the requirement without polling.
+    pub fn set_schema_frost_group(env: Env, authorizer: Address, uid: UID, group: FrostGroup) {
+        extend_instance_ttl(&env);
+        authorizer.require_auth();
+        if Self::get_schema(env.clone(), uid.clone()).is_none() {
+            panic_with_error!(&env, SASError::SchemaNotFound);
+        }
+        if !is_owner_address(&env, &uid, &authorizer) {
+            panic_with_error!(&env, SASError::Unauthorized);
+        }
+        if let Err(error) = validate_frost_group(&group) {
+            panic_with_error!(&env, error);
+        }
+
+        let key = (FROST_GROUP, uid.clone());
+        env.storage().persistent().set(&key, &group);
+        env.storage()
+            .persistent()
+            .extend_ttl(&key, LEDGERS_IN_ONE_YEAR, LEDGERS_IN_ONE_YEAR);
+
+        env.events().publish(
+            (SCHEMA_FROST_GROUP_UPDATED, uid.clone()),
+            SchemaFrostGroupUpdatedEvent {
+                schema_uid: uid,
+                authorizer,
+                enabled: true,
+                group_public_key: group.group_public_key,
+                threshold: group.threshold,
+                max_signers: group.max_signers,
+            },
+        );
+
+        extend_instance_ttl(&env);
+    }
+
+    /// Removes a schema's FROST group requirement (#534), restoring the
+    /// ordinary single-key delegated attestation paths for `uid`. Same
+    /// authorization as [`Self::set_schema_frost_group`]. Removing a group
+    /// that was never configured is a no-op write plus an event, so callers
+    /// can retry safely.
+    pub fn clear_schema_frost_group(env: Env, authorizer: Address, uid: UID) {
+        extend_instance_ttl(&env);
+        authorizer.require_auth();
+        if Self::get_schema(env.clone(), uid.clone()).is_none() {
+            panic_with_error!(&env, SASError::SchemaNotFound);
+        }
+        if !is_owner_address(&env, &uid, &authorizer) {
+            panic_with_error!(&env, SASError::Unauthorized);
+        }
+
+        let key = (FROST_GROUP, uid.clone());
+        env.storage().persistent().remove(&key);
+
+        env.events().publish(
+            (SCHEMA_FROST_GROUP_UPDATED, uid.clone()),
+            SchemaFrostGroupUpdatedEvent {
+                schema_uid: uid,
+                authorizer,
+                enabled: false,
+                group_public_key: BytesN::from_array(&env, &[0u8; 32]),
+                threshold: 0,
+                max_signers: 0,
+            },
+        );
+
+        extend_instance_ttl(&env);
+    }
+
+    /// Returns the FROST group `uid` requires for delegated signatures, or
+    /// `None` when the schema uses the ordinary single-key binding (#534).
+    /// Renews the group entry's TTL when present; the missing path writes
+    /// nothing.
+    pub fn get_schema_frost_group(env: Env, uid: UID) -> Option<FrostGroup> {
+        extend_instance_ttl(&env);
+        let key = (FROST_GROUP, uid);
+        let group: Option<FrostGroup> = env.storage().persistent().get(&key);
+        if group.is_some() {
+            env.storage()
+                .persistent()
+                .extend_ttl(&key, LEDGERS_IN_ONE_YEAR, LEDGERS_IN_ONE_YEAR);
+        }
+        group
     }
 
     /// Registers a new schema, paying the configured registration fee (#1).
