@@ -12,7 +12,6 @@ pub enum SASError {
 
     /// Schema validation errors
     InvalidSchema = 101,
-    InvalidSchemaFormat = 104,
     EmptySchema = 105,
     /// A schema definition string violated strict lexical rules: it contained
     /// control characters, invalid/invisible unicode whitespace, or malformed
@@ -126,6 +125,8 @@ pub enum SASError {
     Reentrancy = 502,
 }
 
+#[allow(non_upper_case_globals)]
 impl SASError {
     pub const ReentrancyDetected: SASError = SASError::Reentrancy;
+    pub const InvalidSchemaFormat: SASError = SASError::InvalidSchema;
 }

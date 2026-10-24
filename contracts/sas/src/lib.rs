@@ -8,11 +8,10 @@ extern crate alloc;
 mod frost_test;
 
 use soroban_sas_common::{
-    merkle::{verify_proof, MerkleRoot},
     Attestation, CompactAttestation, CompactAttestationKey, ContractUpgradedEvent,
     DelegationAuthorization, DelegationNonceKey, DelegationSchemaScope, FeeCeilings, FrostGroup,
-    MerkleProofStep, RecipientConsentNonceKey, SASError, SchemaFeeConfig,
-    SchemaMerkleRootUpdatedEvent, LEDGERS_IN_ONE_YEAR, MAX_ATTESTATION_DATA_BYTES, UID,
+    RecipientConsentNonceKey, SASError, SchemaFeeConfig, LEDGERS_IN_ONE_YEAR,
+    MAX_ATTESTATION_DATA_BYTES, UID,
 };
 use soroban_sdk::{
     contract, contractimpl, contracttype, panic_with_error, symbol_short, token, Address, Bytes,
@@ -3775,15 +3774,15 @@ mod test_issue_293;
 #[cfg(test)]
 mod test_issue_296;
 #[cfg(test)]
+mod test_issue_432;
+#[cfg(test)]
 mod test_issue_443;
 #[cfg(test)]
-mod test_issue_432;
+mod test_issue_491;
 #[cfg(test)]
 mod test_issue_492;
 #[cfg(test)]
 mod test_merkle_disclosure;
-#[cfg(test)]
-mod test_issue_491;
 #[cfg(test)]
 mod test_round_trip;
 #[cfg(test)]

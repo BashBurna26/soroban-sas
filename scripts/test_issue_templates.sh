@@ -110,7 +110,7 @@ expect_rejected "missing body key" 's/^body:/bodies:/'
 expect_rejected "missing title" 's/^title:.*/title_removed: x/'
 expect_rejected "non-conventional title" 's/^title: .*/title: "Feature"/'
 expect_rejected "tab indentation" "s/^  - type: dropdown/${TAB}- type: dropdown/"
-expect_rejected "unknown element type" '0,/^  - type: textarea/s//  - type: textfield/'
+expect_rejected "unknown element type" 's/^  - type: textarea/  - type: textfield/'
 expect_rejected "duplicate id" 's/^    id: proposal$/    id: problem/'
 expect_rejected "missing required field id" 's/^    id: proposal$/    id: idea/'
 expect_rejected "no required fields" 's/required: true/required: false/'

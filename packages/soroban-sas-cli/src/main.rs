@@ -2,9 +2,9 @@ use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 
 mod bulk;
 mod cache;
-mod decoder;
 mod completions;
 mod config;
+mod decoder;
 mod hardware;
 mod identity;
 mod importer;

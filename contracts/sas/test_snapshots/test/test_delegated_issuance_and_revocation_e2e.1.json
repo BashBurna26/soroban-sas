@@ -846,6 +846,18 @@
                     },
                     {
                       "key": {
+                        "symbol": "parent_schema_uid"
+                      },
+                      "val": {
+                        "vec": [
+                          {
+                            "symbol": "None"
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "key": {
                         "symbol": "resolver"
                       },
                       "val": {
@@ -2915,6 +2927,18 @@
                 },
                 {
                   "key": {
+                    "symbol": "parent_schema_uid"
+                  },
+                  "val": {
+                    "vec": [
+                      {
+                        "symbol": "None"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "key": {
                     "symbol": "resolver"
                   },
                   "val": {
@@ -3112,6 +3136,119 @@
               },
               {
                 "symbol": "is_authorized"
+              }
+            ],
+            "data": {
+              "bool": false
+            }
+          }
+        }
+      },
+      "failed_call": true
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000003",
+        "type_": "diagnostic",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "fn_call"
+              },
+              {
+                "bytes": "0000000000000000000000000000000000000000000000000000000000000002"
+              },
+              {
+                "symbol": "is_attester_authorized"
+              }
+            ],
+            "data": {
+              "vec": [
+                {
+                  "vec": [
+                    {
+                      "bytes": "c9191556c3b98a9204317e6128f46a5158414f59a772d874d5282760542c4f21"
+                    }
+                  ]
+                },
+                {
+                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOLZM"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "failed_call": true
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000002",
+        "type_": "diagnostic",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "fn_return"
+              },
+              {
+                "symbol": "is_attester_authorized"
+              }
+            ],
+            "data": {
+              "bool": false
+            }
+          }
+        }
+      },
+      "failed_call": true
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000003",
+        "type_": "diagnostic",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "fn_call"
+              },
+              {
+                "bytes": "0000000000000000000000000000000000000000000000000000000000000002"
+              },
+              {
+                "symbol": "is_schema_restricted"
+              }
+            ],
+            "data": {
+              "vec": [
+                {
+                  "bytes": "c9191556c3b98a9204317e6128f46a5158414f59a772d874d5282760542c4f21"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "failed_call": true
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000002",
+        "type_": "diagnostic",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "fn_return"
+              },
+              {
+                "symbol": "is_schema_restricted"
               }
             ],
             "data": {
@@ -3524,6 +3661,18 @@
                   },
                   "val": {
                     "bool": false
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "parent_schema_uid"
+                  },
+                  "val": {
+                    "vec": [
+                      {
+                        "symbol": "None"
+                      }
+                    ]
                   }
                 },
                 {
@@ -4385,6 +4534,18 @@
                 },
                 {
                   "key": {
+                    "symbol": "parent_schema_uid"
+                  },
+                  "val": {
+                    "vec": [
+                      {
+                        "symbol": "None"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "key": {
                     "symbol": "resolver"
                   },
                   "val": {
@@ -5079,6 +5240,18 @@
                 },
                 {
                   "key": {
+                    "symbol": "parent_schema_uid"
+                  },
+                  "val": {
+                    "vec": [
+                      {
+                        "symbol": "None"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "key": {
                     "symbol": "resolver"
                   },
                   "val": {
@@ -5522,6 +5695,18 @@
                   },
                   "val": {
                     "bool": false
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "parent_schema_uid"
+                  },
+                  "val": {
+                    "vec": [
+                      {
+                        "symbol": "None"
+                      }
+                    ]
                   }
                 },
                 {
@@ -6287,6 +6472,18 @@
                 },
                 {
                   "key": {
+                    "symbol": "parent_schema_uid"
+                  },
+                  "val": {
+                    "vec": [
+                      {
+                        "symbol": "None"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "key": {
                     "symbol": "resolver"
                   },
                   "val": {
@@ -6848,6 +7045,18 @@
                 },
                 {
                   "key": {
+                    "symbol": "parent_schema_uid"
+                  },
+                  "val": {
+                    "vec": [
+                      {
+                        "symbol": "None"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "key": {
                     "symbol": "resolver"
                   },
                   "val": {
@@ -7045,6 +7254,119 @@
               },
               {
                 "symbol": "is_authorized"
+              }
+            ],
+            "data": {
+              "bool": false
+            }
+          }
+        }
+      },
+      "failed_call": true
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000003",
+        "type_": "diagnostic",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "fn_call"
+              },
+              {
+                "bytes": "0000000000000000000000000000000000000000000000000000000000000002"
+              },
+              {
+                "symbol": "is_attester_authorized"
+              }
+            ],
+            "data": {
+              "vec": [
+                {
+                  "vec": [
+                    {
+                      "bytes": "c9191556c3b98a9204317e6128f46a5158414f59a772d874d5282760542c4f21"
+                    }
+                  ]
+                },
+                {
+                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "failed_call": true
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000002",
+        "type_": "diagnostic",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "fn_return"
+              },
+              {
+                "symbol": "is_attester_authorized"
+              }
+            ],
+            "data": {
+              "bool": false
+            }
+          }
+        }
+      },
+      "failed_call": true
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000003",
+        "type_": "diagnostic",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "fn_call"
+              },
+              {
+                "bytes": "0000000000000000000000000000000000000000000000000000000000000002"
+              },
+              {
+                "symbol": "is_schema_restricted"
+              }
+            ],
+            "data": {
+              "vec": [
+                {
+                  "bytes": "c9191556c3b98a9204317e6128f46a5158414f59a772d874d5282760542c4f21"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "failed_call": true
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000002",
+        "type_": "diagnostic",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "fn_return"
+              },
+              {
+                "symbol": "is_schema_restricted"
               }
             ],
             "data": {
@@ -7457,6 +7779,18 @@
                   },
                   "val": {
                     "bool": false
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "parent_schema_uid"
+                  },
+                  "val": {
+                    "vec": [
+                      {
+                        "symbol": "None"
+                      }
+                    ]
                   }
                 },
                 {

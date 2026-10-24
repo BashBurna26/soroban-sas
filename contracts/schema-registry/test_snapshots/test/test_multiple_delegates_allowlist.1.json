@@ -236,6 +236,18 @@
                     },
                     {
                       "key": {
+                        "symbol": "parent_schema_uid"
+                      },
+                      "val": {
+                        "vec": [
+                          {
+                            "symbol": "None"
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "key": {
                         "symbol": "resolver"
                       },
                       "val": {
@@ -436,6 +448,63 @@
                 "durability": "persistent",
                 "val": {
                   "u32": 3
+                }
+              }
+            },
+            "ext": "v0"
+          },
+          6307200
+        ]
+      ],
+      [
+        {
+          "contract_data": {
+            "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+            "key": {
+              "vec": [
+                {
+                  "symbol": "SCH_DEL"
+                },
+                {
+                  "vec": [
+                    {
+                      "bytes": "0e3d85a7e9515fe157a7ce0e6b7e7707517e2940295e8be31ef26544fa04d32b"
+                    }
+                  ]
+                }
+              ]
+            },
+            "durability": "persistent"
+          }
+        },
+        [
+          {
+            "last_modified_ledger_seq": 0,
+            "data": {
+              "contract_data": {
+                "ext": "v0",
+                "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+                "key": {
+                  "vec": [
+                    {
+                      "symbol": "SCH_DEL"
+                    },
+                    {
+                      "vec": [
+                        {
+                          "bytes": "0e3d85a7e9515fe157a7ce0e6b7e7707517e2940295e8be31ef26544fa04d32b"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "durability": "persistent",
+                "val": {
+                  "vec": [
+                    {
+                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
+                    }
+                  ]
                 }
               }
             },

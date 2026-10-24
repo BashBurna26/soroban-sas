@@ -1,4 +1,4 @@
-﻿//! Batch-attestation scaling benchmarks (#493).
+//! Batch-attestation scaling benchmarks (#493).
 //!
 //! This harness establishes the batch-size matrix (10..=1,000) and will measure
 //! direct attestations, delegated attestations and revocations as the contract

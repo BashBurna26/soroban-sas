@@ -171,7 +171,6 @@ mod tests {
         (url, server)
     }
 
-
     #[test]
     fn account_ledger_key_round_trips_multiple_ed25519_keys() {
         for public_key in [

@@ -83,7 +83,7 @@ pub mod mock1 {
                 revocable: true,
                 schema: soroban_sdk::String::from_str(&env, "bool like"),
                 deprecated: false,
-                parent_schema_uid: None,
+                parent_schema_uid: None.into(),
             })
         }
     }
@@ -205,7 +205,7 @@ pub mod mock_policy_registry {
                 revocable: policy != RevocationPolicy::IrrevocableOnly,
                 schema: soroban_sdk::String::from_str(&env, "bool flag"),
                 deprecated: false,
-                parent_schema_uid: None,
+                parent_schema_uid: None.into(),
             })
         }
 
@@ -4689,6 +4689,7 @@ mod callback_loop {
                 revocable: true,
                 schema: soroban_sdk::String::from_str(&env, "loop"),
                 deprecated: false,
+                parent_schema_uid: None.into(),
             })
         }
         pub fn is_authorized(_env: Env, _uid: UID, _attester: Address) -> bool {

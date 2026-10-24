@@ -107,6 +107,7 @@ impl MockRegistry {
             revocable: true,
             schema: soroban_sdk::String::from_str(&env, "bool like"),
             deprecated: false,
+            parent_schema_uid: None.into(),
         })
     }
 }

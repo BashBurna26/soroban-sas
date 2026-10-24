@@ -1,7 +1,7 @@
 //! Thread-safe, bounded LRU cache for Schema Registry lookups.
 
-use crate::events::SasEvent;
 use crate::errors::SdkError;
+use crate::events::SasEvent;
 use crate::simulate;
 use soroban_sas_common::SchemaRecord;
 use soroban_sdk::xdr::{Limits, WriteXdr};
@@ -33,6 +33,7 @@ struct CacheState {
     entries: HashMap<SchemaUid, CacheEntry>,
     lru: VecDeque<SchemaUid>,
     refreshing: HashMap<SchemaUid, u64>,
+    #[allow(dead_code)]
     next_refresh_token: u64,
     stats: SchemaCacheStats,
 }
@@ -141,6 +142,7 @@ impl SchemaCache {
         Ok((Some(value), expired))
     }
 
+    #[allow(dead_code)]
     pub(crate) fn start_refresh(&self, uid: SchemaUid) -> Option<u64> {
         let mut state = self.state.lock().expect("schema cache lock poisoned");
         if state.refreshing.contains_key(&uid) {
@@ -152,6 +154,7 @@ impl SchemaCache {
         Some(token)
     }
 
+    #[allow(dead_code)]
     pub(crate) fn finish_refresh(
         &self,
         uid: SchemaUid,
@@ -182,6 +185,7 @@ impl SchemaCache {
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn cancel_refresh(&self, uid: &SchemaUid, token: u64) {
         let mut state = self.state.lock().expect("schema cache lock poisoned");
         if state.refreshing.get(uid) == Some(&token) {

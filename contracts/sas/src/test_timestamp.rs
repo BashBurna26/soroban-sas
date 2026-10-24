@@ -38,7 +38,7 @@ impl MockRegistry {
             revocable: true,
             schema: soroban_sdk::String::from_str(&env, "bool verified_human"),
             deprecated: false,
-            parent_schema_uid: None,
+            parent_schema_uid: None.into(),
         })
     }
 }
@@ -380,13 +380,13 @@ fn check_timestamp_reports_a_doctored_close_time_as_invalid_timestamp() {
     assert_eq!(
         h.client
             .try_check_timestamp(&uid, &anchor(ISSUANCE_LEDGER, ISSUANCE_TIME - 1)),
-        Err(Ok(SASError::InvalidTimestamp.into()))
+        Err(Ok(SASError::InvalidTimestamp))
     );
     // Later than the recorded close time (also ahead of this ledger).
     assert_eq!(
         h.client
             .try_check_timestamp(&uid, &anchor(ISSUANCE_LEDGER, ISSUANCE_TIME + 1)),
-        Err(Ok(SASError::InvalidTimestamp.into()))
+        Err(Ok(SASError::InvalidTimestamp))
     );
 }
 
@@ -400,18 +400,18 @@ fn check_timestamp_reports_a_foreign_ledger_sequence_as_invalid_timestamp() {
     assert_eq!(
         h.client
             .try_check_timestamp(&uid, &anchor(ISSUANCE_LEDGER - 1, ISSUANCE_TIME)),
-        Err(Ok(SASError::InvalidTimestamp.into()))
+        Err(Ok(SASError::InvalidTimestamp))
     );
     assert_eq!(
         h.client
             .try_check_timestamp(&uid, &anchor(ISSUANCE_LEDGER + 1, ISSUANCE_TIME)),
-        Err(Ok(SASError::InvalidTimestamp.into()))
+        Err(Ok(SASError::InvalidTimestamp))
     );
     // A ledger that exists but never touched this uid.
     assert_eq!(
         h.client
             .try_check_timestamp(&uid, &anchor(REVOCATION_LEDGER, REVOCATION_TIME)),
-        Err(Ok(SASError::InvalidTimestamp.into()))
+        Err(Ok(SASError::InvalidTimestamp))
     );
 }
 
@@ -428,7 +428,7 @@ fn a_revocation_cannot_borrow_the_issuance_sequence_or_time() {
     ] {
         assert_eq!(
             h.client.try_check_timestamp(&uid, &claim),
-            Err(Ok(SASError::InvalidTimestamp.into()))
+            Err(Ok(SASError::InvalidTimestamp))
         );
         assert!(!h.client.verify_timestamp(&uid, &claim));
     }
@@ -447,7 +447,7 @@ fn a_claim_from_a_ledger_that_has_not_closed_yet_is_rejected() {
     h.move_to(ISSUANCE_LEDGER - 10, ISSUANCE_TIME - 50);
     assert_eq!(
         h.client.try_check_timestamp(&uid, &genuine),
-        Err(Ok(SASError::InvalidTimestamp.into()))
+        Err(Ok(SASError::InvalidTimestamp))
     );
     assert!(!h.client.verify_timestamp(&uid, &genuine));
 
@@ -464,7 +464,7 @@ fn check_timestamp_distinguishes_a_missing_anchor_from_a_bad_claim() {
     assert_eq!(
         h.client
             .try_check_timestamp(&unknown, &anchor(ISSUANCE_LEDGER, ISSUANCE_TIME)),
-        Err(Ok(SASError::TimestampAnchorNotFound.into()))
+        Err(Ok(SASError::TimestampAnchorNotFound))
     );
     assert!(!h
         .client
@@ -494,7 +494,7 @@ fn stored_anchors_that_run_backwards_fail_closed() {
     for claim in [anchor(ISSUANCE_LEDGER, ISSUANCE_TIME), corrupt.clone()] {
         assert_eq!(
             h.client.try_check_timestamp(&uid, &claim),
-            Err(Ok(SASError::InvalidTimestamp.into()))
+            Err(Ok(SASError::InvalidTimestamp))
         );
         assert!(!h.client.verify_timestamp(&uid, &claim));
     }

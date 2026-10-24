@@ -39,8 +39,8 @@ use crate::strkey::{parse_address, AddressKind};
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use soroban_sas_common::{
     hash_delegated_revocation, hash_offchain_attestation, hash_scoped_attestation, Attestation,
-    AttestationDomain, DelegationAuthorization, DelegationSchemaScope,
-    MAX_ATTESTATION_DATA_BYTES, MAX_MULTI_ATTEST, UID,
+    AttestationDomain, DelegationAuthorization, DelegationSchemaScope, MAX_ATTESTATION_DATA_BYTES,
+    MAX_MULTI_ATTEST, UID,
 };
 use soroban_sdk::{xdr::ToXdr, Address, Bytes, BytesN, Env};
 

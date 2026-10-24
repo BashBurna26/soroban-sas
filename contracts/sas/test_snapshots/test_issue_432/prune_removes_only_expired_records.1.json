@@ -1411,6 +1411,18 @@
                 },
                 {
                   "key": {
+                    "symbol": "parent_schema_uid"
+                  },
+                  "val": {
+                    "vec": [
+                      {
+                        "symbol": "None"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "key": {
                     "symbol": "resolver"
                   },
                   "val": {
@@ -1444,6 +1456,111 @@
                       }
                     ]
                   }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "failed_call": false
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000002",
+        "type_": "diagnostic",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "fn_call"
+              },
+              {
+                "bytes": "0000000000000000000000000000000000000000000000000000000000000001"
+              },
+              {
+                "symbol": "is_schema_quarantined"
+              }
+            ],
+            "data": {
+              "vec": [
+                {
+                  "bytes": "0202020202020202020202020202020202020202020202020202020202020202"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "failed_call": false
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000001",
+        "type_": "diagnostic",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "error"
+              },
+              {
+                "error": {
+                  "context": "missing_value"
+                }
+              }
+            ],
+            "data": {
+              "vec": [
+                {
+                  "string": "calling unknown contract function"
+                },
+                {
+                  "symbol": "is_schema_quarantined"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "failed_call": true
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000002",
+        "type_": "diagnostic",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "error"
+              },
+              {
+                "error": {
+                  "context": "missing_value"
+                }
+              }
+            ],
+            "data": {
+              "vec": [
+                {
+                  "string": "contract try_call failed"
+                },
+                {
+                  "symbol": "is_schema_quarantined"
+                },
+                {
+                  "vec": [
+                    {
+                      "vec": [
+                        {
+                          "bytes": "0202020202020202020202020202020202020202020202020202020202020202"
+                        }
+                      ]
+                    }
+                  ]
                 }
               ]
             }
@@ -2152,6 +2269,18 @@
                 },
                 {
                   "key": {
+                    "symbol": "parent_schema_uid"
+                  },
+                  "val": {
+                    "vec": [
+                      {
+                        "symbol": "None"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "key": {
                     "symbol": "resolver"
                   },
                   "val": {
@@ -2185,6 +2314,111 @@
                       }
                     ]
                   }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "failed_call": false
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000002",
+        "type_": "diagnostic",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "fn_call"
+              },
+              {
+                "bytes": "0000000000000000000000000000000000000000000000000000000000000001"
+              },
+              {
+                "symbol": "is_schema_quarantined"
+              }
+            ],
+            "data": {
+              "vec": [
+                {
+                  "bytes": "0202020202020202020202020202020202020202020202020202020202020202"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "failed_call": false
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000001",
+        "type_": "diagnostic",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "error"
+              },
+              {
+                "error": {
+                  "context": "missing_value"
+                }
+              }
+            ],
+            "data": {
+              "vec": [
+                {
+                  "string": "calling unknown contract function"
+                },
+                {
+                  "symbol": "is_schema_quarantined"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "failed_call": true
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000002",
+        "type_": "diagnostic",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "error"
+              },
+              {
+                "error": {
+                  "context": "missing_value"
+                }
+              }
+            ],
+            "data": {
+              "vec": [
+                {
+                  "string": "contract try_call failed"
+                },
+                {
+                  "symbol": "is_schema_quarantined"
+                },
+                {
+                  "vec": [
+                    {
+                      "vec": [
+                        {
+                          "bytes": "0202020202020202020202020202020202020202020202020202020202020202"
+                        }
+                      ]
+                    }
+                  ]
                 }
               ]
             }
@@ -2893,6 +3127,18 @@
                 },
                 {
                   "key": {
+                    "symbol": "parent_schema_uid"
+                  },
+                  "val": {
+                    "vec": [
+                      {
+                        "symbol": "None"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "key": {
                     "symbol": "resolver"
                   },
                   "val": {
@@ -2926,6 +3172,111 @@
                       }
                     ]
                   }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "failed_call": false
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000002",
+        "type_": "diagnostic",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "fn_call"
+              },
+              {
+                "bytes": "0000000000000000000000000000000000000000000000000000000000000001"
+              },
+              {
+                "symbol": "is_schema_quarantined"
+              }
+            ],
+            "data": {
+              "vec": [
+                {
+                  "bytes": "0202020202020202020202020202020202020202020202020202020202020202"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "failed_call": false
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000001",
+        "type_": "diagnostic",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "error"
+              },
+              {
+                "error": {
+                  "context": "missing_value"
+                }
+              }
+            ],
+            "data": {
+              "vec": [
+                {
+                  "string": "calling unknown contract function"
+                },
+                {
+                  "symbol": "is_schema_quarantined"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "failed_call": true
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "0000000000000000000000000000000000000000000000000000000000000002",
+        "type_": "diagnostic",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "error"
+              },
+              {
+                "error": {
+                  "context": "missing_value"
+                }
+              }
+            ],
+            "data": {
+              "vec": [
+                {
+                  "string": "contract try_call failed"
+                },
+                {
+                  "symbol": "is_schema_quarantined"
+                },
+                {
+                  "vec": [
+                    {
+                      "vec": [
+                        {
+                          "bytes": "0202020202020202020202020202020202020202020202020202020202020202"
+                        }
+                      ]
+                    }
+                  ]
                 }
               ]
             }

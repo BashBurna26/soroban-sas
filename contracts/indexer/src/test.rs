@@ -16,7 +16,6 @@ mod mock {
             true
         }
 
-
         /// Mirrors the real SAS contract's cross-contract call into the
         /// indexer, so tests can prove the indexer accepts writes that
         /// originate from the bound SAS contract's own execution context.

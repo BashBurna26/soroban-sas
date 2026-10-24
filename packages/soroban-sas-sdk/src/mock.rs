@@ -171,6 +171,7 @@ impl SASClientTrait for MockSASClient {
             resolver: resolver_addr,
             revocable,
             deprecated: false,
+            parent_schema_uid: None.into(),
         };
 
         let mut raw_uid = [0u8; 32];

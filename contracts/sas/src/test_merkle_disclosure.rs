@@ -35,6 +35,7 @@ impl MockRegistry {
             revocable: true,
             schema: soroban_sdk::String::from_str(&env, "bytes32 merkle_root"),
             deprecated: false,
+            parent_schema_uid: None.into(),
         })
     }
 }

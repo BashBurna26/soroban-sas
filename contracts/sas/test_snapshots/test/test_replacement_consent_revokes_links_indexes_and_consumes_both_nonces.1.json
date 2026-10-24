@@ -1656,6 +1656,18 @@
                 },
                 {
                   "key": {
+                    "symbol": "parent_schema_uid"
+                  },
+                  "val": {
+                    "vec": [
+                      {
+                        "symbol": "None"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "key": {
                     "symbol": "resolver"
                   },
                   "val": {
@@ -2716,6 +2728,18 @@
                 },
                 {
                   "key": {
+                    "symbol": "parent_schema_uid"
+                  },
+                  "val": {
+                    "vec": [
+                      {
+                        "symbol": "None"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "key": {
                     "symbol": "resolver"
                   },
                   "val": {
@@ -3063,6 +3087,18 @@
                   },
                   "val": {
                     "bool": false
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "parent_schema_uid"
+                  },
+                  "val": {
+                    "vec": [
+                      {
+                        "symbol": "None"
+                      }
+                    ]
                   }
                 },
                 {
@@ -4514,6 +4550,18 @@
                   },
                   "val": {
                     "bool": false
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "parent_schema_uid"
+                  },
+                  "val": {
+                    "vec": [
+                      {
+                        "symbol": "None"
+                      }
+                    ]
                   }
                 },
                 {

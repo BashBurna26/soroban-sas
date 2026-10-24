@@ -107,8 +107,7 @@ fn respond(mut stream: TcpStream, result_xdr: &str) {
         }
     };
 
-    let request_body =
-        String::from_utf8_lossy(&request[header_end..header_end + content_length]);
+    let request_body = String::from_utf8_lossy(&request[header_end..header_end + content_length]);
     let Some(id) = request_id(&request_body) else {
         return;
     };
@@ -161,9 +160,7 @@ fn benchmark_schema_lookups(c: &mut Criterion) {
     assert_eq!(server.request_count(), requests_before_uncached + 1);
 
     let requests_before_cached = server.request_count();
-    cached
-        .fetch_schema(&uid)
-        .expect("verify cached lookup");
+    cached.fetch_schema(&uid).expect("verify cached lookup");
     assert_eq!(server.request_count(), requests_before_cached);
 
     let mut group = c.benchmark_group("schema_lookup_high_contention");

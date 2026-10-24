@@ -11,12 +11,12 @@ use soroban_sas_common::{
         SCHEMA_OWNERSHIP_TRANSFERRED, SCHEMA_QUARANTINED, TREASURY_UPDATED,
     },
     validate_frost_group, validate_schema_lexical, validate_schema_syntax, ContractUpgradedEvent,
-    DelegatesStatus, FrostGroup, PreviousAddress, RevocationPolicy, SASError,
-    SchemaAttesterAddedEvent, SchemaAttesterRemovedEvent, SchemaBatchItem, SchemaDelegateAddedEvent,
-    SchemaDelegateRemovedEvent, SchemaDeprecatedEvent, SchemaFeeUpdatedEvent,
-    SchemaFrostGroupUpdatedEvent, SchemaMerkleRootUpdatedEvent, SchemaMetadataUpdatedEvent,
-    SchemaOwnershipProposedEvent, SchemaOwnershipTransferredEvent, SchemaRecord, SchemaStatus,
-    TreasuryUpdatedEvent, LEDGERS_IN_ONE_YEAR, UID,
+    DelegatesStatus, FrostGroup, OptionUid, PreviousAddress, RevocationPolicy, SASError,
+    SchemaAttesterAddedEvent, SchemaAttesterRemovedEvent, SchemaBatchItem,
+    SchemaDelegateAddedEvent, SchemaDelegateRemovedEvent, SchemaDeprecatedEvent,
+    SchemaFeeUpdatedEvent, SchemaFrostGroupUpdatedEvent, SchemaMerkleRootUpdatedEvent,
+    SchemaMetadataUpdatedEvent, SchemaOwnershipProposedEvent, SchemaOwnershipTransferredEvent,
+    SchemaRecord, SchemaStatus, TreasuryUpdatedEvent, LEDGERS_IN_ONE_YEAR, UID,
 };
 use soroban_sdk::{
     contract, contractimpl, contracttype, panic_with_error, token, Address, BytesN, Env, String,
@@ -289,7 +289,7 @@ pub struct SchemaLineage {
     /// The schema this lineage was computed for.
     pub schema_uid: UID,
     /// Direct parent, or `None` when the schema is a root.
-    pub parent: Option<UID>,
+    pub parent: OptionUid,
     /// Oldest ancestor. Equals `schema_uid` when the schema is a root.
     pub root: UID,
     /// Number of parent links between the schema and `root` (0 for a root).
@@ -306,7 +306,7 @@ fn lineage_root(env: &Env, uid: &UID) -> (UID, u32) {
     let mut hops: u32 = 0;
     while hops <= MAX_SCHEMA_LINEAGE_DEPTH {
         let record: Option<SchemaRecord> = env.storage().persistent().get(&current);
-        match record.and_then(|r| r.parent_schema_uid) {
+        match record.and_then(|r| r.parent_schema_uid.into()) {
             Some(parent) => {
                 current = parent;
                 hops = hops.saturating_add(1);
@@ -1130,7 +1130,7 @@ impl SchemaRegistry {
 
         let mut ancestors: Vec<UID> = Vec::new(&env);
         let mut root = schema_uid.clone();
-        let mut next = record.parent_schema_uid.clone();
+        let mut next: Option<UID> = record.parent_schema_uid.clone().into();
         while let Some(ancestor) = next {
             if ancestors.len() >= MAX_SCHEMA_LINEAGE_DEPTH {
                 panic_with_error!(&env, SASError::LimitExceeded);
@@ -1141,7 +1141,7 @@ impl SchemaRegistry {
             if ancestor_record.is_some() {
                 renew_schema_record(&env, &ancestor);
             }
-            next = ancestor_record.and_then(|r| r.parent_schema_uid);
+            next = ancestor_record.and_then(|r| r.parent_schema_uid.into());
         }
 
         SchemaLineage {
@@ -1691,7 +1691,16 @@ impl SchemaRegistry {
         if schema_history(&env, predecessor_uid.clone()).len() >= MAX_SCHEMA_HISTORY_DEPTH {
             panic_with_error!(&env, SASError::InvalidSchemaDefinition);
         }
-        let uid = Self::register_internal(env.clone(), owner, schema, resolver, revocable, 0, None, None);
+        let uid = Self::register_internal(
+            env.clone(),
+            owner,
+            schema,
+            resolver,
+            revocable,
+            0,
+            None,
+            None,
+        );
         let key = (SCHEMA_PREDECESSOR, uid.clone());
         env.storage().persistent().set(&key, &predecessor_uid);
         env.storage()
@@ -1870,7 +1879,16 @@ impl SchemaRegistry {
     ) -> UID {
         owner.require_auth();
         let revocable = policy != RevocationPolicy::IrrevocableOnly;
-        let uid = Self::register_internal(env.clone(), owner, schema, resolver, revocable, 0, None, None);
+        let uid = Self::register_internal(
+            env.clone(),
+            owner,
+            schema,
+            resolver,
+            revocable,
+            0,
+            None,
+            None,
+        );
         let policy_key = (SCHEMA_POLICY, uid.clone());
         env.storage().persistent().set(&policy_key, &policy);
         env.storage().persistent().extend_ttl(
@@ -2206,7 +2224,16 @@ impl SchemaRegistry {
         metadata_uri: Option<String>,
     ) -> UID {
         owner.require_auth();
-        Self::register_internal(env, owner, schema, resolver, revocable, 0, None, metadata_uri)
+        Self::register_internal(
+            env,
+            owner,
+            schema,
+            resolver,
+            revocable,
+            0,
+            None,
+            metadata_uri,
+        )
     }
 
     /// Registers a new schema with both fee payment and optional metadata URI (#444).
@@ -2249,7 +2276,16 @@ impl SchemaRegistry {
             token::Client::new(&env, &token).transfer(&owner, &treasury, &value);
         }
 
-        Self::register_internal(env, owner, schema, resolver, revocable, 0, None, metadata_uri)
+        Self::register_internal(
+            env,
+            owner,
+            schema,
+            resolver,
+            revocable,
+            0,
+            None,
+            metadata_uri,
+        )
     }
 
     /// Registers a new schema with metadata URI (#444).
@@ -2401,7 +2437,16 @@ impl SchemaRegistry {
         if let Some(ref name) = category {
             validate_category(&env, name);
         }
-        let uid = Self::register_internal(env.clone(), owner, schema, resolver, revocable, 0, None, None);
+        let uid = Self::register_internal(
+            env.clone(),
+            owner,
+            schema,
+            resolver,
+            revocable,
+            0,
+            None,
+            None,
+        );
         if let Some(name) = category {
             if !name.is_empty() {
                 index_category(&env, &uid, &name);
@@ -2478,7 +2523,6 @@ impl SchemaRegistry {
             scanned += 1;
         }
         (items, current)
->>>>>>> origin/main
     }
 
     fn register_internal(
@@ -2522,7 +2566,7 @@ impl SchemaRegistry {
             revocable,
             schema,
             deprecated: false,
-            parent_schema_uid,
+            parent_schema_uid: parent_schema_uid.into(),
         };
         env.storage().persistent().set(&uid, &record);
         env.storage()

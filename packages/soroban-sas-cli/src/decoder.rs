@@ -27,11 +27,13 @@ fn parse_schema(schema: &str) -> Result<Vec<(&str, &str)>, DecodeError> {
     schema
         .split(',')
         .map(|part| {
+            let part = part.trim();
             let (name, ty) = part.split_once(' ').ok_or_else(|| {
                 DecodeError(format!(
                     "invalid schema field {part:?}: expected `name Type`"
                 ))
             })?;
+            let name = name.trim();
             let ty = ty.trim();
             if name.is_empty() || ty.is_empty() {
                 return Err(DecodeError(format!(
@@ -99,9 +101,10 @@ fn decode_value(field: &str, ty: &str, value: ScVal) -> Result<Value, DecodeErro
             .to_utf8_string()
             .map(Value::String)
             .map_err(|_| DecodeError(format!("field {field}: string is not valid UTF-8"))),
-        ("bytes", ScVal::Bytes(value)) => {
-            Ok(Value::String(format!("0x{}", hex::encode(value.as_slice()))))
-        }
+        ("bytes", ScVal::Bytes(value)) => Ok(Value::String(format!(
+            "0x{}",
+            hex::encode(value.as_slice())
+        ))),
         ("address", ScVal::Address(value)) => Ok(decode_address(value)),
         (
             "bool" | "u32" | "uint32" | "i32" | "int32" | "u64" | "uint64" | "i64" | "int64"

@@ -84,6 +84,7 @@ pub mod mock_indexer {
             recipient: Address,
             _schema_uid: UID,
             _attester: Address,
+            _expiration_time: u64,
         ) {
             let mut uids: Vec<UID> = env
                 .storage()
@@ -129,7 +130,7 @@ fn test_verify_offchain_rejects_unknown_and_deprecated_schema() {
         revocable: true,
         schema: SorobanString::from_str(&env, "bool like_soroban"),
         deprecated: false,
-        parent_schema_uid: None,
+        parent_schema_uid: None.into(),
     };
     let mock_client = mock_registry::MockRegistryClient::new(&env, &registry_id);
     // Need to store via contract call so storage is in contract's context
@@ -233,22 +234,35 @@ fn setup_sas_with_registry(
 fn policy_attestation(
     env: &Env,
     schema_uid: &UID,
-    uid_seed: [u8; 32],
+    _uid_seed: [u8; 32],
     revocable: bool,
 ) -> Attestation {
+    let recipient = Address::generate(env);
+    let attester = Address::generate(env);
+    let data = Bytes::new(env);
+    let uid = soroban_sas_common::attestation_uid(env, schema_uid, &recipient, &attester, &data);
     Attestation {
-        uid: UID(BytesN::from_array(env, &uid_seed)),
+        uid,
         schema_uid: schema_uid.clone(),
         time: 1000,
         expiration_time: 0,
         valid_from: 0,
         revocation_time: 0,
         ref_uid: UID(BytesN::from_array(env, &[0u8; 32])),
-        recipient: Address::generate(env),
-        attester: Address::generate(env),
+        recipient,
+        attester,
         revocable,
-        data: Bytes::new(env),
+        data,
     }
+}
+
+#[soroban_sdk::contract]
+pub struct TestResolver;
+
+#[soroban_sdk::contractimpl]
+impl TestResolver {
+    pub fn on_attest(_env: Env, _attestation: Attestation) {}
+    pub fn on_revoke(_env: Env, _attestation: Attestation) {}
 }
 
 #[test]
@@ -260,10 +274,11 @@ fn test_policy_irrevocable_only_rejects_revocable_attestation() {
     let schema_uid = UID(BytesN::from_array(&env, &[10u8; 32]));
     let record = SchemaRecord {
         uid: schema_uid.clone(),
-        resolver: Address::generate(&env),
+        resolver: env.register_contract(None, TestResolver),
         revocable: false,
         schema: SorobanString::from_str(&env, "bool like"),
         deprecated: false,
+        parent_schema_uid: None.into(),
     };
     mock_client.set_schema(&schema_uid, &record);
     mock_client.set_policy(&schema_uid, &RevocationPolicy::IrrevocableOnly);
@@ -288,10 +303,11 @@ fn test_policy_revocable_only_rejects_irrevocable_attestation() {
     let schema_uid = UID(BytesN::from_array(&env, &[20u8; 32]));
     let record = SchemaRecord {
         uid: schema_uid.clone(),
-        resolver: Address::generate(&env),
+        resolver: env.register_contract(None, TestResolver),
         revocable: true,
         schema: SorobanString::from_str(&env, "bool like"),
         deprecated: false,
+        parent_schema_uid: None.into(),
     };
     mock_client.set_schema(&schema_uid, &record);
     mock_client.set_policy(&schema_uid, &RevocationPolicy::RevocableOnly);
@@ -316,10 +332,11 @@ fn test_policy_permissive_allows_either_flag() {
     let schema_uid = UID(BytesN::from_array(&env, &[30u8; 32]));
     let record = SchemaRecord {
         uid: schema_uid.clone(),
-        resolver: Address::generate(&env),
+        resolver: env.register_contract(None, TestResolver),
         revocable: true,
         schema: SorobanString::from_str(&env, "bool like"),
         deprecated: false,
+        parent_schema_uid: None.into(),
     };
     mock_client.set_schema(&schema_uid, &record);
     mock_client.set_policy(&schema_uid, &RevocationPolicy::Permissive);
@@ -341,10 +358,11 @@ fn test_policy_falls_back_to_bool_when_registry_lacks_policy() {
     let schema_uid = UID(BytesN::from_array(&env, &[40u8; 32]));
     let record = SchemaRecord {
         uid: schema_uid.clone(),
-        resolver: Address::generate(&env),
+        resolver: env.register_contract(None, TestResolver),
         revocable: false,
         schema: SorobanString::from_str(&env, "bool like"),
         deprecated: false,
+        parent_schema_uid: None.into(),
     };
     mock_client.set_schema(&schema_uid, &record);
 
@@ -385,14 +403,18 @@ fn test_invalidate_nonces_advances_watermark_and_blocks_replay() {
     let schema_uid = UID(BytesN::from_array(&env, &[60u8; 32]));
     let record = SchemaRecord {
         uid: schema_uid.clone(),
-        resolver: Address::generate(&env),
+        resolver: env.register_contract(None, TestResolver),
         revocable: true,
         schema: SorobanString::from_str(&env, "bool like"),
         deprecated: false,
+        parent_schema_uid: None.into(),
     };
     mock_client.set_schema(&schema_uid, &record);
 
-    let att_uid = UID(BytesN::from_array(&env, &[61u8; 32]));
+    let recipient = Address::generate(&env);
+    let data = Bytes::new(&env);
+    let att_uid =
+        soroban_sas_common::attestation_uid(&env, &schema_uid, &recipient, &attester, &data);
     let attestation = Attestation {
         uid: att_uid.clone(),
         schema_uid: schema_uid.clone(),
@@ -401,10 +423,10 @@ fn test_invalidate_nonces_advances_watermark_and_blocks_replay() {
         valid_from: 0,
         revocation_time: 0,
         ref_uid: UID(BytesN::from_array(&env, &[0u8; 32])),
-        recipient: Address::generate(&env),
+        recipient,
         attester: attester.clone(),
         revocable: true,
-        data: Bytes::new(&env),
+        data,
     };
     sas_client.attest(&attestation);
 
@@ -538,7 +560,7 @@ mod revocability {
             revocable: schema_revocable,
             schema: SorobanString::from_str(&env, "value String"),
             deprecated: false,
-            parent_schema_uid: None,
+            parent_schema_uid: None.into(),
         };
         let mock_client = mock_registry::MockRegistryClient::new(&env, &registry_id);
         mock_client.set_schema(&schema_uid, &record);
@@ -706,7 +728,7 @@ mod revocability {
             revocable: false,
             schema: SorobanString::from_str(&fx.env, "value String"),
             deprecated: false,
-            parent_schema_uid: None,
+            parent_schema_uid: None.into(),
         };
         let mock_client = mock_registry::MockRegistryClient::new(&fx.env, &fx.registry_id);
         mock_client.set_schema(&non_revocable_schema_uid, &non_revocable_record);
@@ -956,7 +978,7 @@ mod resolver_semantics {
             revocable: true,
             schema: SorobanString::from_str(&env, "value String"),
             deprecated: false,
-            parent_schema_uid: None,
+            parent_schema_uid: None.into(),
         };
         let mock_client = mock_registry::MockRegistryClient::new(&env, &registry_id);
         mock_client.set_schema(&schema_uid, &record);
@@ -1090,7 +1112,7 @@ mod resolver_semantics {
             revocable: true,
             schema: SorobanString::from_str(&fx.env, "value String"),
             deprecated: false,
-            parent_schema_uid: None,
+            parent_schema_uid: None.into(),
         };
         let mock_client = mock_registry::MockRegistryClient::new(&fx.env, &fx.registry_id);
         mock_client.set_schema(&rejecting_schema_uid, &rejecting_record);
@@ -1224,7 +1246,7 @@ mod revoke_resolver_semantics {
             revocable: true,
             schema: SorobanString::from_str(&env, "value String"),
             deprecated: false,
-            parent_schema_uid: None,
+            parent_schema_uid: None.into(),
         };
         let mock_client = mock_registry::MockRegistryClient::new(&env, &registry_id);
         mock_client.set_schema(&schema_uid, &record);
@@ -1414,6 +1436,7 @@ fn test_broadcast_attest_happy_path_and_reverse_indexing() {
         resolver: resolver_id,
         revocable: true,
         deprecated: false,
+        parent_schema_uid: None.into(),
     };
     registry_client.set_schema(&schema_uid, &schema_record);
     registry_client.set_creator(&schema_uid, &creator);
@@ -1512,6 +1535,7 @@ fn test_broadcast_attest_atomic_rollback_and_error_cases() {
         resolver: rejecting_resolver_id,
         revocable: true,
         deprecated: false,
+        parent_schema_uid: None.into(),
     };
     registry_client.set_schema(&schema_uid, &schema_record);
     registry_client.set_creator(&schema_uid, &creator);
@@ -1545,6 +1569,7 @@ fn test_broadcast_attest_atomic_rollback_and_error_cases() {
         resolver: accepting_resolver_id,
         revocable: true,
         deprecated: false,
+        parent_schema_uid: None.into(),
     };
     registry_client.set_schema(&schema_uid2, &schema_record2);
     registry_client.set_creator(&schema_uid2, &creator);
@@ -1602,6 +1627,7 @@ fn test_broadcast_attest_bounds() {
         resolver: resolver_id,
         revocable: true,
         deprecated: false,
+        parent_schema_uid: None.into(),
     };
     registry_client.set_schema(&schema_uid, &schema_record);
     registry_client.set_creator(&schema_uid, &creator);
@@ -1661,6 +1687,7 @@ fn test_fee_split_base_only_when_no_creator_fee() {
         resolver: resolver_id,
         revocable: true,
         deprecated: false,
+        parent_schema_uid: None.into(),
     };
     registry_client.set_schema(&schema_uid, &schema_record);
     registry_client.set_creator(&schema_uid, &creator);
@@ -1728,6 +1755,7 @@ fn test_fee_split_fixed_creator_fee_and_withdrawals() {
         resolver: resolver_id,
         revocable: true,
         deprecated: false,
+        parent_schema_uid: None.into(),
     };
     registry_client.set_schema(&schema_uid, &schema_record);
     registry_client.set_creator(&schema_uid, &creator);
@@ -1823,6 +1851,7 @@ fn test_fee_split_basis_points_and_ceilings() {
         resolver: resolver_id,
         revocable: true,
         deprecated: false,
+        parent_schema_uid: None.into(),
     };
     registry_client.set_schema(&schema_uid, &schema_record);
     registry_client.set_creator(&schema_uid, &creator);

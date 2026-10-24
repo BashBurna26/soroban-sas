@@ -160,7 +160,7 @@ if [[ "$members_found" -eq 0 ]]; then
 fi
 
 if [[ -f "$ROOT/CHANGELOG.md" ]]; then
-    if ! tr -d '\r' <"$ROOT/CHANGELOG.md" | grep -qF "## [$VERSION]"; then
+    if ! grep -qF "## [$VERSION]" "$ROOT/CHANGELOG.md"; then
         problem "CHANGELOG.md has no '## [$VERSION]' section"
     fi
 else

@@ -216,6 +216,7 @@ impl HostileResolver {
             revocable: true,
             schema: SorobanString::from_str(&env, "bool valid"),
             deprecated: false,
+            parent_schema_uid: None.into(),
         })
     }
 }

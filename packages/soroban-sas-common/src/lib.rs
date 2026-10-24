@@ -1,5 +1,7 @@
 #![allow(unexpected_cfgs)]
 #![no_std]
+#[cfg(test)]
+extern crate alloc;
 pub mod eip712;
 pub mod errors;
 pub mod events;
@@ -176,6 +178,96 @@ pub enum SchemaStatus {
     Quarantined = 2,
 }
 
+/// `Option<UID>`-equivalent for contract types (#442).
+///
+/// `#[contracttype]`'s generated `Option<T>` conversion requires a
+/// host-independent `From<T> for ScVal`, which contract types like `UID` do
+/// not provide (unlike primitives such as `i128`) — at this pinned SDK version
+/// that surfaces as a compile error specifically under the `testutils` cfg
+/// (`cargo test`, `cargo clippy --all-targets`). A plain enum sidesteps it:
+/// enum-with-data conversions go through a different, unaffected codegen
+/// path (the same pattern used by [`PreviousAddress`] and [`DelegationSchemaScope`]).
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum OptionUid {
+    None,
+    Some(UID),
+}
+
+impl From<Option<UID>> for OptionUid {
+    fn from(value: Option<UID>) -> Self {
+        match value {
+            Some(uid) => OptionUid::Some(uid),
+            None => OptionUid::None,
+        }
+    }
+}
+
+impl From<OptionUid> for Option<UID> {
+    fn from(value: OptionUid) -> Self {
+        match value {
+            OptionUid::Some(uid) => Some(uid),
+            OptionUid::None => None,
+        }
+    }
+}
+
+impl From<&OptionUid> for Option<UID> {
+    fn from(value: &OptionUid) -> Self {
+        match value {
+            OptionUid::Some(uid) => Some(uid.clone()),
+            OptionUid::None => None,
+        }
+    }
+}
+
+impl PartialEq<Option<UID>> for OptionUid {
+    fn eq(&self, other: &Option<UID>) -> bool {
+        match (self, other) {
+            (OptionUid::None, None) => true,
+            (OptionUid::Some(a), Some(b)) => a == b,
+            _ => false,
+        }
+    }
+}
+
+impl PartialEq<OptionUid> for Option<UID> {
+    fn eq(&self, other: &OptionUid) -> bool {
+        other == self
+    }
+}
+
+impl OptionUid {
+    pub fn is_some(&self) -> bool {
+        matches!(self, OptionUid::Some(_))
+    }
+
+    pub fn is_none(&self) -> bool {
+        matches!(self, OptionUid::None)
+    }
+
+    pub fn as_option(&self) -> Option<&UID> {
+        match self {
+            OptionUid::Some(uid) => Some(uid),
+            OptionUid::None => None,
+        }
+    }
+
+    pub fn into_option(self) -> Option<UID> {
+        match self {
+            OptionUid::Some(uid) => Some(uid),
+            OptionUid::None => None,
+        }
+    }
+
+    pub fn unwrap(self) -> UID {
+        match self {
+            OptionUid::Some(uid) => uid,
+            OptionUid::None => panic!("called OptionUid::unwrap on None"),
+        }
+    }
+}
+
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[repr(C)] // Optimize storage serialization (#284)
@@ -189,7 +281,7 @@ pub struct SchemaRecord {
     /// guaranteed to have been registered when the record was written, and it
     /// is not part of the UID preimage, so linking a schema to a parent never
     /// changes its content-addressed identity. `None` for root schemas.
-    pub parent_schema_uid: Option<UID>,
+    pub parent_schema_uid: OptionUid,
 }
 
 /// Status of schema delegates, partitioned into active and expired.
