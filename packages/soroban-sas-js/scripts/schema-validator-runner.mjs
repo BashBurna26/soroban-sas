@@ -18,6 +18,7 @@ export function classifySchema(data) {
   const parts = content.trim().split(",");
   if (parts.length > 64) return "invalid";
   if (parts.length === 0) return "empty";
+  const seenNames = new Set();
   for (let i = 0; i < parts.length; i++) {
     // Rust permits one optional space following a comma, but none before.
     let field = parts[i];
@@ -35,6 +36,9 @@ export function classifySchema(data) {
     const type = field.slice(separator + 1);
     if (name.length > 32 || type.length > 32 || type.startsWith(" ")) return "invalid";
     if (!/^[A-Za-z_][A-Za-z_0-9]*$/.test(name)) return "invalid";
+    const lowerName = name.toLowerCase();
+    if (seenNames.has(lowerName)) return "invalid";
+    seenNames.add(lowerName);
     if (!/[A-Za-z]/.test(type) || !/^[A-Za-z0-9_<>\[\],:()? ]+$/.test(type) || type.includes("  "))
       return "invalid";
   }

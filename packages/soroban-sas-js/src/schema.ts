@@ -81,8 +81,8 @@ function parseFields(schema: string): SchemaField[] {
       type = parseType(tokens[1]);
     }
     if (!IDENT.test(name) || name.length > 32) throw new Error(`Invalid schema field name: ${name}`);
-    if (names.has(name)) throw new Error(`Duplicate schema field: ${name}`);
-    names.add(name);
+    if (names.has(name.toLowerCase())) throw new Error(`Duplicate schema field: ${name}`);
+    names.add(name.toLowerCase());
     return { name, type };
   });
 }
