@@ -291,6 +291,279 @@ fn test_get_schemas_pagination_skips_deprecated_and_returns_cursor() {
     assert_eq!(c2, 30);
 }
 
+// --- #447 strict schema lexical validation ----------------------------------
+
+fn fresh_registry(env: &Env) -> (SchemaRegistryClient<'static>, Address, Address) {
+    let cid = env.register_contract(None, SchemaRegistry);
+    let client = SchemaRegistryClient::new(env, &cid);
+    env.mock_all_auths();
+    let admin = Address::generate(env);
+    client.init(&admin);
+    let owner = Address::generate(env);
+    let resolver = Address::generate(env);
+    (client, owner, resolver)
+}
+
+#[test]
+fn test_register_rejects_control_and_invisible_characters() {
+    let env = Env::default();
+    let (client, owner, resolver) = fresh_registry(&env);
+
+    for raw in [
+        "bool\tlike",       // tab
+        "bool\nlike",       // newline
+        "bool\u{0}like",    // null byte
+        "bool\u{00a0}like", // non-breaking space
+        "bool\u{200b}like", // zero-width space
+        "bool\u{feff}like", // BOM
+    ] {
+        let schema = String::from_str(&env, raw);
+        assert_eq!(
+            client.try_register(&owner, &schema, &resolver, &true),
+            Err(Ok(SASError::InvalidSchemaDefinition.into())),
+            "expected InvalidSchemaDefinition for {raw:?}"
+        );
+    }
+}
+
+#[test]
+fn test_register_rejects_malformed_separators() {
+    let env = Env::default();
+    let (client, owner, resolver) = fresh_registry(&env);
+
+    for raw in [
+        "bool like,",      // trailing delimiter
+        ",bool like",      // leading delimiter
+        "bool  like",      // double space
+        "bool like ,x y",  // space before comma
+        "bool like,  x y", // double space after comma
+    ] {
+        let schema = String::from_str(&env, raw);
+        assert_eq!(
+            client.try_register(&owner, &schema, &resolver, &true),
+            Err(Ok(SASError::InvalidSchemaDefinition.into())),
+            "expected InvalidSchemaDefinition for {raw:?}"
+        );
+    }
+}
+
+#[test]
+fn test_register_accepts_canonical_schemas() {
+    let env = Env::default();
+    let (client, owner, resolver) = fresh_registry(&env);
+
+    for raw in [
+        "bool like_soroban",
+        "first_name String, last_name String",
+        "uint256 amount,address to",
+    ] {
+        let schema = String::from_str(&env, raw);
+        assert!(
+            client
+                .try_register(&owner, &schema, &resolver, &true)
+                .is_ok(),
+            "canonical schema should register: {raw:?}"
+        );
+    }
+}
+
+/// Adversarial fuzz: inject every control byte (and DEL) into an
+/// otherwise-valid schema and assert each is rejected at registration with the
+/// typed lexical error. Control bytes revert before any storage write, so this
+/// stays within the test budget while covering the full adversarial range.
+/// (Exhaustive printable-byte coverage lives in the common crate's
+/// `validate_schema_lexical` fuzz test, which has no host budget.)
+#[test]
+fn test_register_fuzz_adversarial_control_bytes() {
+    let env = Env::default();
+    let (client, owner, resolver) = fresh_registry(&env);
+
+    for byte in 0u8..=127 {
+        if byte >= 0x20 && byte != 0x7f {
+            continue;
+        }
+        let c = byte as char;
+        let mut raw = alloc::string::String::new();
+        raw.push_str("bool ");
+        raw.push(c);
+        raw.push_str("field");
+        let schema = String::from_str(&env, &raw);
+        assert_eq!(
+            client.try_register(&owner, &schema, &resolver, &true),
+            Err(Ok(SASError::InvalidSchemaDefinition.into())),
+            "control byte {byte:#x} must be rejected as InvalidSchemaDefinition"
+        );
+    }
+}
+
+// --- #448 schema revocation policy registration -----------------------------
+
+#[test]
+fn test_register_with_policy_and_get_schema_policy() {
+    use soroban_sas_common::RevocationPolicy;
+    let env = Env::default();
+    let (client, owner, resolver) = fresh_registry(&env);
+
+    let s1 = String::from_str(&env, "bool a_field");
+    let uid1 =
+        client.register_with_policy(&owner, &s1, &resolver, &RevocationPolicy::RevocableOnly);
+    assert_eq!(
+        client.get_schema_policy(&uid1),
+        RevocationPolicy::RevocableOnly
+    );
+    // RevocableOnly keeps the stored record revocable.
+    assert!(client.get_schema(&uid1).unwrap().revocable);
+
+    let s2 = String::from_str(&env, "bool b_field");
+    let uid2 =
+        client.register_with_policy(&owner, &s2, &resolver, &RevocationPolicy::IrrevocableOnly);
+    assert_eq!(
+        client.get_schema_policy(&uid2),
+        RevocationPolicy::IrrevocableOnly
+    );
+    // IrrevocableOnly maps to a non-revocable record.
+    assert!(!client.get_schema(&uid2).unwrap().revocable);
+
+    let s3 = String::from_str(&env, "bool c_field");
+    let uid3 = client.register_with_policy(&owner, &s3, &resolver, &RevocationPolicy::Permissive);
+    assert_eq!(
+        client.get_schema_policy(&uid3),
+        RevocationPolicy::Permissive
+    );
+}
+
+#[test]
+fn test_get_schema_policy_defaults_from_bool() {
+    use soroban_sas_common::RevocationPolicy;
+    let env = Env::default();
+    let (client, owner, resolver) = fresh_registry(&env);
+
+    // Plain register with revocable=false maps to IrrevocableOnly.
+    let s1 = String::from_str(&env, "bool irr_field");
+    let uid1 = client.register(&owner, &s1, &resolver, &false);
+    assert_eq!(
+        client.get_schema_policy(&uid1),
+        RevocationPolicy::IrrevocableOnly
+    );
+
+    // revocable=true maps to Permissive.
+    let s2 = String::from_str(&env, "bool rev_field");
+    let uid2 = client.register(&owner, &s2, &resolver, &true);
+    assert_eq!(
+        client.get_schema_policy(&uid2),
+        RevocationPolicy::Permissive
+    );
+
+    // Unknown schema defaults to Permissive.
+    let unknown = UID(BytesN::from_array(&env, &[200u8; 32]));
+    assert_eq!(
+        client.get_schema_policy(&unknown),
+        RevocationPolicy::Permissive
+    );
+}
+
+// --- #446 two-step schema ownership transfer --------------------------------
+
+fn register_one(
+    env: &Env,
+    client: &SchemaRegistryClient,
+    owner: &Address,
+    resolver: &Address,
+    seed: &str,
+) -> UID {
+    let schema = String::from_str(env, seed);
+    client.register(owner, &schema, resolver, &true)
+}
+
+#[test]
+fn test_schema_ownership_two_step_claim() {
+    let env = Env::default();
+    let (client, owner, resolver) = fresh_registry(&env);
+    let uid = register_one(&env, &client, &owner, &resolver, "bool own_a");
+    let new_owner = Address::generate(&env);
+
+    assert_eq!(client.get_schema_owner(&uid), Some(owner.clone()));
+    assert_eq!(client.get_pending_schema_owner(&uid), None);
+
+    // Propose: ownership is NOT finalized yet.
+    client.propose_schema_owner(&uid, &new_owner);
+    assert_eq!(
+        client.get_pending_schema_owner(&uid),
+        Some(new_owner.clone())
+    );
+    assert_eq!(client.get_schema_owner(&uid), Some(owner.clone()));
+
+    // Claim by the proposed owner finalizes the transfer.
+    client.claim_schema_ownership(&uid);
+    assert_eq!(client.get_schema_owner(&uid), Some(new_owner.clone()));
+    assert_eq!(client.get_pending_schema_owner(&uid), None);
+}
+
+#[test]
+fn test_schema_ownership_claim_without_proposal_unauthorized() {
+    let env = Env::default();
+    let (client, owner, resolver) = fresh_registry(&env);
+    let uid = register_one(&env, &client, &owner, &resolver, "bool own_b");
+
+    // No proposal exists: claim reverts with Unauthorized.
+    assert_eq!(
+        client.try_claim_schema_ownership(&uid),
+        Err(Ok(SASError::Unauthorized.into()))
+    );
+}
+
+#[test]
+fn test_schema_ownership_cancel_transfer() {
+    let env = Env::default();
+    let (client, owner, resolver) = fresh_registry(&env);
+    let uid = register_one(&env, &client, &owner, &resolver, "bool own_c");
+    let new_owner = Address::generate(&env);
+
+    client.propose_schema_owner(&uid, &new_owner);
+    assert_eq!(
+        client.get_pending_schema_owner(&uid),
+        Some(new_owner.clone())
+    );
+
+    // Current owner cancels; the pending proposal is cleared.
+    client.cancel_schema_ownership_transfer(&uid);
+    assert_eq!(client.get_pending_schema_owner(&uid), None);
+    assert_eq!(client.get_schema_owner(&uid), Some(owner.clone()));
+
+    // A subsequent claim now fails because there is no pending proposal.
+    assert_eq!(
+        client.try_claim_schema_ownership(&uid),
+        Err(Ok(SASError::Unauthorized.into()))
+    );
+
+    // Cancelling again with nothing pending reverts.
+    assert_eq!(
+        client.try_cancel_schema_ownership_transfer(&uid),
+        Err(Ok(SASError::SchemaNotFound.into()))
+    );
+}
+
+#[test]
+fn test_propose_schema_owner_rejects_same_owner_and_unknown_schema() {
+    let env = Env::default();
+    let (client, owner, resolver) = fresh_registry(&env);
+    let uid = register_one(&env, &client, &owner, &resolver, "bool own_d");
+
+    // Proposing the current owner is a no-op mistake -> InvalidValue.
+    assert_eq!(
+        client.try_propose_schema_owner(&uid, &owner),
+        Err(Ok(SASError::InvalidValue.into()))
+    );
+
+    // Proposing on an unknown schema -> SchemaNotFound.
+    let unknown = UID(BytesN::from_array(&env, &[201u8; 32]));
+    let new_owner = Address::generate(&env);
+    assert_eq!(
+        client.try_propose_schema_owner(&unknown, &new_owner),
+        Err(Ok(SASError::SchemaNotFound.into()))
+    );
+}
+
 /// Issue #259: `get_schema_by_content` resolves the same record as
 /// `get_schema`, returns `None` for unregistered content, and reverts on a
 /// malformed schema string instead of silently reporting "not registered".

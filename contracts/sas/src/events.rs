@@ -2,12 +2,12 @@ use soroban_sas_common::{
     events::{
         ADMIN_TRANSFER_COMPLETED, ADMIN_TRANSFER_PROPOSED, ATTESTATION_RENEWED, ATTESTED,
         BATCH_ATTESTED, BATCH_REVOKED, CONTRACT_PAUSED, CONTRACT_UNPAUSED, CONTRACT_UPGRADED,
-        INDEXER_STRICT_UPDATED, INDEXER_UPDATED, REVOKED,
+        INDEXER_STRICT_UPDATED, INDEXER_UPDATED, NONCES_INVALIDATED, REVOKED,
     },
     AdminTransferCompletedEvent, AdminTransferProposedEvent, Attestation, AttestationIssuedEvent,
     AttestationRenewedEvent, AttestationRevokedEvent, BatchAttestedEvent, BatchRevokedEvent,
     ContractPausedEvent, ContractUnpausedEvent, ContractUpgradedEvent, IndexerStrictUpdatedEvent,
-    IndexerUpdatedEvent, UID,
+    IndexerUpdatedEvent, NoncesInvalidatedEvent, UID,
 };
 use soroban_sdk::{symbol_short, Address, Env};
 
@@ -28,6 +28,25 @@ pub fn publish_attested(env: &Env, attestation: &Attestation) {
             attestation.attester.clone(),
         ),
         event,
+    );
+}
+
+/// Emits a v2 fee-aware issuance record, preserving the legacy ATTESTED ABI.
+pub fn publish_attestation_with_fee(env: &Env, attestation: &Attestation, fee_amount: i128) {
+    use soroban_sas_common::{AttestationIssuedWithFeeEvent, ATTFEE};
+    env.events().publish(
+        (
+            ATTFEE,
+            attestation.schema_uid.clone(),
+            attestation.attester.clone(),
+        ),
+        AttestationIssuedWithFeeEvent {
+            uid: attestation.uid.clone(),
+            schema_uid: attestation.schema_uid.clone(),
+            attester: attestation.attester.clone(),
+            recipient: attestation.recipient.clone(),
+            fee_amount,
+        },
     );
 }
 
@@ -255,17 +274,39 @@ pub fn publish_attestation_renewed(
 /// Publishes the `NoncesInvalidated` event when an attester advances their
 /// nonce high-water mark (#437).
 ///
-/// Topics: `(NONCES_INVALIDATED, attester)`.
+/// Topics: `(NONCES_INVALIDATED, attester)`. `min_nonce`/`max_nonce` describe
+/// the inclusive range of delegation nonces cancelled by the watermark advance.
 pub fn publish_nonces_invalidated(env: &Env, attester: &Address, min_nonce: u64, max_nonce: u64) {
-    use soroban_sas_common::events::NONCES_INVALIDATED;
-    use soroban_sas_common::NoncesInvalidatedEvent;
-
     env.events().publish(
         (NONCES_INVALIDATED, attester.clone()),
         NoncesInvalidatedEvent {
             attester: attester.clone(),
             min_nonce,
             max_nonce,
+        },
+    );
+}
+
+/// Audit-friendly circuit-breaker events, alongside the v1 contract pause
+/// event stream so existing clients need not change their decoder.
+pub fn publish_protocol_paused(env: &Env, authorizer: Address) {
+    use soroban_sas_common::{ProtocolPauseEvent, PROTOCOL_PAUSED};
+    env.events().publish(
+        (PROTOCOL_PAUSED, authorizer.clone()),
+        ProtocolPauseEvent {
+            authorizer,
+            timestamp: env.ledger().timestamp(),
+        },
+    );
+}
+
+pub fn publish_protocol_unpaused(env: &Env, authorizer: Address) {
+    use soroban_sas_common::{ProtocolPauseEvent, PROTOCOL_UNPAUSED};
+    env.events().publish(
+        (PROTOCOL_UNPAUSED, authorizer.clone()),
+        ProtocolPauseEvent {
+            authorizer,
+            timestamp: env.ledger().timestamp(),
         },
     );
 }
