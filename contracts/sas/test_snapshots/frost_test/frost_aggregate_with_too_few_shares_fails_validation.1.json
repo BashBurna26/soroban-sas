@@ -1321,67 +1321,21 @@
           "v0": {
             "topics": [
               {
-                "symbol": "fn_call"
+                "symbol": "error"
               },
               {
-                "bytes": "0000000000000000000000000000000000000000000000000000000000000001"
-              },
-              {
-                "symbol": "get_schema_frost_group"
+                "error": {
+                  "contract": 301
+                }
               }
             ],
             "data": {
               "vec": [
                 {
-                  "bytes": "10158623c230e7464627d753bc8846909e49586725eea59ab088beb1b1d873da"
-                }
-              ]
-            }
-          }
-        }
-      },
-      "failed_call": true
-    },
-    {
-      "event": {
-        "ext": "v0",
-        "contract_id": "0000000000000000000000000000000000000000000000000000000000000001",
-        "type_": "diagnostic",
-        "body": {
-          "v0": {
-            "topics": [
-              {
-                "symbol": "fn_return"
-              },
-              {
-                "symbol": "get_schema_frost_group"
-              }
-            ],
-            "data": {
-              "map": [
-                {
-                  "key": {
-                    "symbol": "group_public_key"
-                  },
-                  "val": {
-                    "bytes": "66e48a1825159a55c52b514d9e925b24711f0a3ce0af9b5b370fb074256b0561"
-                  }
+                  "string": "failing with contract error"
                 },
                 {
-                  "key": {
-                    "symbol": "max_signers"
-                  },
-                  "val": {
-                    "u32": 3
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "threshold"
-                  },
-                  "val": {
-                    "u32": 2
-                  }
+                  "u32": 301
                 }
               ]
             }
@@ -1403,32 +1357,7 @@
               },
               {
                 "error": {
-                  "crypto": "invalid_input"
-                }
-              }
-            ],
-            "data": {
-              "string": "failed ED25519 verification"
-            }
-          }
-        }
-      },
-      "failed_call": true
-    },
-    {
-      "event": {
-        "ext": "v0",
-        "contract_id": "0000000000000000000000000000000000000000000000000000000000000002",
-        "type_": "diagnostic",
-        "body": {
-          "v0": {
-            "topics": [
-              {
-                "symbol": "error"
-              },
-              {
-                "error": {
-                  "crypto": "invalid_input"
+                  "contract": 301
                 }
               }
             ],
@@ -1453,7 +1382,7 @@
               },
               {
                 "error": {
-                  "crypto": "invalid_input"
+                  "contract": 301
                 }
               }
             ],
@@ -1478,7 +1407,7 @@
               },
               {
                 "error": {
-                  "crypto": "invalid_input"
+                  "contract": 301
                 }
               }
             ],
