@@ -1,5 +1,14 @@
 //! Specialized error handling for SDK
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
+static VERBOSE_CONTRACT_DIAGNOSTICS: AtomicBool = AtomicBool::new(false);
+
+/// Controls whether structured contract errors include their full RPC trace.
+pub fn set_verbose_contract_diagnostics(enabled: bool) {
+    VERBOSE_CONTRACT_DIAGNOSTICS.store(enabled, Ordering::Relaxed);
+}
+
 /// Failures that can occur while building, signing, submitting, or querying
 /// through the SDK's RPC-backed clients.
 #[derive(Debug)]
@@ -161,7 +170,10 @@ fn write_contract_error(
         None => format!("contract rejected the call (unknown custom error code {code})"),
     };
     match diagnostics {
-        Some(details) if !details.trim().is_empty() => {
+        Some(details)
+            if VERBOSE_CONTRACT_DIAGNOSTICS.load(Ordering::Relaxed)
+                && !details.trim().is_empty() =>
+        {
             write!(f, "{summary}\nSoroban RPC diagnostics:\n{details}")
         }
         _ => f.write_str(&summary),
@@ -343,6 +355,7 @@ mod acl_error_code_tests {
 
     #[test]
     fn contract_error_display_keeps_rpc_diagnostics() {
+        super::set_verbose_contract_diagnostics(true);
         let message = SdkError::ContractErrorWithDiagnostics {
             code: 409,
             diagnostics: "Event log: resolver rejected the schema".to_string(),
@@ -352,5 +365,6 @@ mod acl_error_code_tests {
         assert!(message.contains("SASError::ResolverRejected"));
         assert!(message.contains("code 409"));
         assert!(message.contains("Event log: resolver rejected the schema"));
+        super::set_verbose_contract_diagnostics(false);
     }
 }
